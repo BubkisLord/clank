@@ -80,10 +80,11 @@ export const ARTIFACTS = [5, 7, 10, 15, 20, 25, 30];
 
 
 export class Board {
-  constructor({ rooms, tunnels, name = 'classic' }) {
+  constructor({ rooms, tunnels, name = 'classic', geometry = CLASSIC_GEOMETRY }) {
     this.name = name;
     this.rooms = rooms;
     this.tunnels = tunnels; // [from, to, opts]
+    this.geometry = geometry; // { width, height, roomW, roomH, depthsY }
     this.byId = Object.fromEntries(rooms.map((r) => [r.id, r]));
   }
   room(id) { return this.byId[id]; }
@@ -100,7 +101,28 @@ export class Board {
     for (const [a, b] of this.tunnels) { if (a === roomId) out.add(b); if (b === roomId) out.add(a); }
     return [...out];
   }
-  toJSON() { return { name: this.name, rooms: this.rooms, tunnels: this.tunnels.map(([a, b, o = {}]) => ({ from: a, to: b, ...o })) }; }
+  toJSON() { return { name: this.name, geometry: this.geometry, rooms: this.rooms, tunnels: this.tunnels.map(([a, b, o = {}]) => ({ from: a, to: b, ...o })) }; }
+}
+
+export const CLASSIC_GEOMETRY = { width: 1000, height: 1000, roomW: 176, roomH: 80, depthsY: 430 };
+const RANDOM_GEOMETRY = { width: 1240, height: 1260, roomW: 190, roomH: 84, depthsY: 578 };
+
+// --- geometry helpers for the generator ---
+function segIntersectsRect(p, q, cx, cy, hw, hh) {
+  // Liang–Barsky clip of segment p->q against the rect centred on (cx, cy)
+  let t0 = 0, t1 = 1; const dx = q.x - p.x, dy = q.y - p.y;
+  const checks = [[-dx, p.x - (cx - hw)], [dx, (cx + hw) - p.x], [-dy, p.y - (cy - hh)], [dy, (cy + hh) - p.y]];
+  for (const [pk, qk] of checks) {
+    if (pk === 0) { if (qk < 0) return false; continue; }
+    const r = qk / pk;
+    if (pk < 0) { if (r > t1) return false; if (r > t0) t0 = r; }
+    else { if (r < t0) return false; if (r < t1) t1 = r; }
+  }
+  return true;
+}
+function segmentsCross(a, b, c, d) {
+  const o = (p, q, r) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+  return o(a, b, c) !== o(a, b, d) && o(c, d, a) !== o(c, d, b) && o(a, b, c) !== 0 && o(c, d, a) !== 0;
 }
 
 export function classicBoard() { return new Board({ rooms: ROOMS, tunnels: TUNNELS, name: 'classic' }); }
@@ -142,18 +164,20 @@ export function generateBoard(seed = Math.floor(Math.random() * 2 ** 31)) {
   const take = (arr) => arr.splice(Math.floor(rnd() * arr.length), 1)[0];
   const shuf = (arr) => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
 
-  // --- rooms on a jittered grid ---
+  // --- rooms on a jittered grid (wide canvas, generous row spacing) ---
+  const G = RANDOM_GEOMETRY;
   const rowSpec = [
-    { y: 150, n: 3, depths: false }, { y: 268, n: 4, depths: false }, { y: 372, n: 4, depths: false },
-    { y: 492, n: 4, depths: true }, { y: 612, n: 4, depths: true }, { y: 740, n: 4, depths: true }, { y: 880, n: 3 + (rnd() < 0.5 ? 1 : 0), depths: true },
+    { y: 215, n: 3, depths: false }, { y: 365, n: 4, depths: false }, { y: 505, n: 4, depths: false },
+    { y: 660, n: 4, depths: true }, { y: 810, n: 4, depths: true }, { y: 960, n: 4, depths: true }, { y: 1120, n: 3 + (rnd() < 0.5 ? 1 : 0), depths: true },
   ];
-  const rooms = [{ id: 'start', name: 'Outside the Dungeon', x: 500, y: 45, start: true, row: 0 }];
+  const rooms = [{ id: 'start', name: 'Outside the Dungeon', x: G.width / 2, y: 70, start: true, row: 0 }];
   const rows = [[rooms[0]]];
+  const xMin = 170, xMax = G.width - 170;
   rowSpec.forEach((spec, ri) => {
     const row = [];
     for (let i = 0; i < spec.n; i++) {
-      const x = Math.round(Math.min(905, Math.max(95, (1000 * (i + 0.5)) / spec.n + (rnd() - 0.5) * 70)));
-      const y = Math.round(spec.y + (rnd() - 0.5) * 36);
+      const x = Math.round(Math.min(xMax, Math.max(xMin, xMin + ((xMax - xMin) * (i + 0.5)) / spec.n + (rnd() - 0.5) * 80)));
+      const y = Math.round(spec.y + (rnd() - 0.5) * 30);
       const r = { id: `r${ri + 1}_${i}`, name: '', x, y, depths: spec.depths, row: ri + 1 };
       row.push(r); rooms.push(r);
     }
@@ -165,22 +189,33 @@ export function generateBoard(seed = Math.floor(Math.random() * 2 ** 31)) {
   const key = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
   const link = (a, b, opts = {}) => { const k = key(a.id, b.id); if (!edges.has(k)) edges.set(k, [a.id, b.id, opts]); return edges.get(k); };
   const dist = (a, b) => Math.hypot(a.x - b.x, (a.y - b.y) * 0.6);
+  // A tunnel is "blocked" if it would pass through a third room or cross an existing tunnel.
+  const hw = G.roomW / 2 + 14, hh = G.roomH / 2 + 14;
+  const blocked = (a, b) => {
+    for (const r of rooms) if (r !== a && r !== b && segIntersectsRect(a, b, r.x, r.y, hw, hh)) return true;
+    for (const [ia, ib] of edges.values()) {
+      if (ia === a.id || ia === b.id || ib === a.id || ib === b.id) continue;
+      const ra = rooms.find((r) => r.id === ia), rb = rooms.find((r) => r.id === ib);
+      if (segmentsCross(a, b, ra, rb)) return true;
+    }
+    return false;
+  };
+  const linkClean = (cands, r, force) => { for (const c of cands) if (!blocked(c, r)) { link(c, r); return true; } if (force && cands[0]) { link(cands[0], r); return true; } return false; };
   // start -> middle of row 1
-  const r1 = [...rows[1]].sort((a, b) => Math.abs(a.x - 500) - Math.abs(b.x - 500));
+  const r1 = [...rows[1]].sort((a, b) => Math.abs(a.x - G.width / 2) - Math.abs(b.x - G.width / 2));
   link(rooms[0], r1[0]);
-  if (rnd() < 0.5) link(rooms[0], r1[1]);
+  if (rnd() < 0.5 && !blocked(rooms[0], r1[1])) link(rooms[0], r1[1]);
   for (let ri = 1; ri < rows.length; ri++) {
     const row = rows[ri];
-    // horizontal links
-    for (let i = 0; i + 1 < row.length; i++) if (rnd() < 0.72) link(row[i], row[i + 1]);
-    if (ri === 1) for (let i = 0; i + 1 < row.length; i++) link(row[i], row[i + 1]);
-    // vertical links to previous row
+    // horizontal links between neighbours
+    for (let i = 0; i + 1 < row.length; i++) if (ri === 1 || rnd() < 0.72) link(row[i], row[i + 1]);
+    // vertical links to the previous row: nearest first, then optional second links that stay clean
     if (ri >= 2) {
       const above = rows[ri - 1];
+      for (const r of row) linkClean([...above].sort((a, b) => dist(a, r) - dist(b, r)), r, true);
       for (const r of row) {
-        const sorted = [...above].sort((a, b) => dist(a, r) - dist(b, r));
-        link(sorted[0], r);
-        if (sorted[1] && rnd() < 0.42 && Math.abs(sorted[1].x - r.x) < 360) link(sorted[1], r);
+        const sorted = [...above].sort((a, b) => dist(a, r) - dist(b, r)).filter((a) => !edges.has(key(a.id, r.id)));
+        if (sorted[0] && rnd() < 0.42 && Math.abs(sorted[0].x - r.x) < 420 && !blocked(sorted[0], r)) link(sorted[0], r);
       }
     }
   }
@@ -207,7 +242,8 @@ export function generateBoard(seed = Math.floor(Math.random() * 2 ** 31)) {
   let reach = reachable('start', { respectOneWay: false });
   for (const r of rooms) if (!reach.has(r.id)) {
     const cands = rooms.filter((o) => reach.has(o.id) && o.row === r.row - 1).sort((a, b) => dist(a, r) - dist(b, r));
-    tunnels.push([cands[0].id, r.id, {}]);
+    const c = cands.find((o) => !blocked(o, r)) || cands[0];
+    tunnels.push([c.id, r.id, {}]); edges.set(key(c.id, r.id), tunnels[tunnels.length - 1]);
     reach = reachable('start', { respectOneWay: false });
   }
 
@@ -281,15 +317,13 @@ export function generateBoard(seed = Math.floor(Math.random() * 2 ** 31)) {
     if (a && b) t[2] = {};
     else if (a || b) t[2] = { locked: true };
   }
-  // the Shortcut: a locked passage from deep in the Depths straight up to the surface
-  const deepRooms = rooms.filter((r) => r.row >= 5 && !inPocket(r.id));
-  const highRooms = rooms.filter((r) => r.row >= 1 && r.row <= 2);
-  let best = null;
-  for (const d of deepRooms) for (const h of highRooms) {
-    const score = Math.abs(d.x - h.x) + rnd() * 60;
-    if (!best || score < best.score) best = { d, h, score };
-  }
-  if (best) tunnels.push([best.h.id, best.d.id, { locked: true, shortcut: true }]);
+  // the Shortcut: a locked passage from deep in the Depths up to the surface, routed along one
+  // side of the map so it never passes under other rooms
+  const side = rnd() < 0.5 ? 'left' : 'right';
+  const edgeDist = (r) => (side === 'left' ? r.x : G.width - r.x);
+  const deepRooms = rooms.filter((r) => r.row >= 5 && !inPocket(r.id)).sort((a, b) => edgeDist(a) - edgeDist(b));
+  const highRooms = rooms.filter((r) => r.row >= 1 && r.row <= 2).sort((a, b) => edgeDist(a) - edgeDist(b));
+  if (deepRooms[0] && highRooms[0]) tunnels.push([highRooms[0].id, deepRooms[0].id, { locked: true, shortcut: side }]);
   // orient one-way tunnels: prefer pointing away from the entrance, then validate escape routes
   for (const t of tunnels) if (t[2].oneWay) { if (byId[t[0]].row > byId[t[1]].row) [t[0], t[1]] = [t[1], t[0]]; }
   const everyoneCanEscape = () => { const back = reachable('start', { respectOneWay: true, skipLocked: true, reverse: true }); return rooms.every((r) => inPocket(r.id) || back.has(r.id)); };
@@ -302,7 +336,7 @@ export function generateBoard(seed = Math.floor(Math.random() * 2 ** 31)) {
 
   const cleanRooms = rooms.map(({ feature, row, ...r }) => r);
   const cleanTunnels = tunnels.map(([a, b, o]) => [a, b, Object.keys(o).length ? o : undefined]).map(([a, b, o]) => (o ? [a, b, o] : [a, b]));
-  return new Board({ rooms: cleanRooms, tunnels: cleanTunnels, name: `random-${seed}` });
+  return new Board({ rooms: cleanRooms, tunnels: cleanTunnels, name: `random-${seed}`, geometry: G });
 }
 
 export function publicRules() {

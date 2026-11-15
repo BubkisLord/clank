@@ -55,7 +55,7 @@ export default [
   companion({ id: 'dwarven_peddler', name: 'Dwarven Peddler', qty: 1, cost: 4, points: 1,
     text: '+2 Gold. At game end: +4 points if you have two different of: Chalice, Monkey Idol, Dragon Egg.',
     play: [{ gold: 2 }],
-    endGamePoints(game, p) {
+    endGamePoints(_, p) {
       const kinds = new Set();
       if (p.secrets.some((s) => s.id === 'chalice')) kinds.add('chalice');
       if (p.secrets.some((s) => s.id === 'dragon_egg')) kinds.add('egg');

@@ -215,34 +215,46 @@ function renderDragon() {
 
 function renderBoard() {
   const b = state.board;
+  const G = b.geometry || { width: 1000, height: 1000, roomW: 176, roomH: 80, depthsY: 430 };
   const mp = myPlayer();
   const legal = state.legal;
   const moves = new Map((legal?.moves || []).map((m) => [m.to, m]));
   const tele = new Set(legal?.teleports || []);
-  const W = 176, H = 80;
+  const W = G.roomW, H = G.roomH;
+  const svg = $('board');
+  svg.setAttribute('viewBox', `0 0 ${G.width} ${G.height}`);
+  // point on the border of a room's box, on the line towards another point
+  const edgePoint = (from, to, pad = 2) => {
+    const dx = to.x - from.x, dy = to.y - from.y;
+    if (!dx && !dy) return { x: from.x, y: from.y };
+    const t = Math.min((W / 2 + pad) / Math.abs(dx || 1e-9), (H / 2 + pad) / Math.abs(dy || 1e-9));
+    return { x: from.x + dx * t, y: from.y + dy * t };
+  };
   let s = `<defs>
     <linearGradient id="roomShade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d0a10" stop-opacity=".15"/><stop offset=".45" stop-color="#0d0a10" stop-opacity=".55"/><stop offset="1" stop-color="#0d0a10" stop-opacity=".9"/></linearGradient>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6a5a46"/></marker>
-    <filter id="soft"><feGaussianBlur stdDeviation="1.2"/></filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e3d4ad"/></marker>
   </defs>
-  <image href="assets/tiles/tile-room.jpg" x="-20" y="-20" width="1040" height="470" preserveAspectRatio="xMidYMid slice" opacity=".16"/>
-  <image href="assets/tiles/tile-depths.jpg" x="-20" y="430" width="1040" height="600" preserveAspectRatio="xMidYMid slice" opacity=".22"/>
-  <rect x="0" y="428" width="1000" height="4" fill="#0d0a10"/><rect x="0" y="432" width="1000" height="1" fill="#6a5a46" opacity=".6"/>
-  <text x="22" y="462" class="depths-label">✦ THE DEPTHS ✦</text>`;
+  <image href="assets/tiles/tile-room.jpg" x="-20" y="-20" width="${G.width + 40}" height="${G.depthsY + 40}" preserveAspectRatio="xMidYMid slice" opacity=".16"/>
+  <image href="assets/tiles/tile-depths.jpg" x="-20" y="${G.depthsY}" width="${G.width + 40}" height="${G.height - G.depthsY + 40}" preserveAspectRatio="xMidYMid slice" opacity=".22"/>
+  <rect x="0" y="${G.depthsY - 2}" width="${G.width}" height="4" fill="#0d0a10"/><rect x="0" y="${G.depthsY + 2}" width="${G.width}" height="1" fill="#6a5a46" opacity=".6"/>
+  <text x="22" y="${G.depthsY + 32}" class="depths-label">✦ THE DEPTHS ✦</text>`;
+  const labels = [];
   for (const t of b.tunnels) {
     const a = room(t.from), c = room(t.to);
     const cls = ['tunnel', t.locked ? 'locked' : '', t.boots ? 'footprints' : '', t.monsters ? 'monsters' : '', t.shortcut ? 'shortcut' : ''].join(' ');
+    const label = [t.locked ? '🔒' : '', t.boots ? '👣' : '', t.monsters ? '⚔'.repeat(t.monsters) : ''].join('');
     if (t.shortcut) {
-      // a long locked passage: drawn as a curve bowing away from the map centre so it reads as a secret route
-      const mx = (a.x + c.x) / 2, bow = a.x + c.x > 1000 ? 120 : -120;
-      const d = `M${a.x},${a.y} Q${mx + bow},${(a.y + c.y) / 2} ${c.x},${c.y}`;
-      s += `<path d="${d}" class="tunnel-bg"/><path d="${d}" class="${cls}"><title>Locked shortcut — Master Key needed</title></path>`;
-      s += `<rect x="${mx + bow / 2 - 30}" y="${(a.y + c.y) / 2 - 12}" width="60" height="22" rx="6" class="tlabel-bg"/><text x="${mx + bow / 2}" y="${(a.y + c.y) / 2 + 5}" class="tlabel">🔒 ⤴</text>`;
+      // routed along the side of the map so it never runs under other rooms
+      const laneX = t.shortcut === 'left' ? 28 : G.width - 28;
+      const pa = { x: a.x + (laneX > a.x ? W / 2 : -W / 2), y: a.y }, pc = { x: c.x + (laneX > c.x ? W / 2 : -W / 2), y: c.y };
+      const d = `M${pa.x},${pa.y} L${laneX},${pa.y} L${laneX},${pc.y} L${pc.x},${pc.y}`;
+      s += `<path d="${d}" class="tunnel-bg"/><path d="${d}" class="${cls}"><title>Locked shortcut between ${a.name} and ${c.name} — Master Key needed</title></path>`;
+      labels.push({ x: laneX, y: (pa.y + pc.y) / 2, text: '🔒⤴', w: 46 });
       continue;
     }
-    s += `<line x1="${a.x}" y1="${a.y}" x2="${c.x}" y2="${c.y}" class="tunnel-bg"/><line x1="${a.x}" y1="${a.y}" x2="${c.x}" y2="${c.y}" class="${cls}" ${t.oneWay ? 'marker-end="url(#arrow)"' : ''}/>`;
-    const label = [t.locked ? '🔒' : '', t.boots ? '👣' : '', t.monsters ? '⚔'.repeat(t.monsters) : ''].join('');
-    if (label) { const mx = (a.x + c.x) / 2, my = (a.y + c.y) / 2; s += `<rect x="${mx - 17}" y="${my - 12}" width="34" height="22" rx="6" class="tlabel-bg"/><text x="${mx}" y="${my + 5}" class="tlabel">${label}</text>`; }
+    const p1 = edgePoint(a, c), p2 = edgePoint(c, a);
+    s += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" class="tunnel-bg"/><line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" class="${cls}" ${t.oneWay ? 'marker-end="url(#arrow)"' : ''}><title>${a.name} ↔ ${c.name}${t.oneWay ? ' (one way)' : ''}${label ? ' ' + label : ''}</title></line>`;
+    if (label) labels.push({ x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2, text: label, w: 20 + 16 * [...label].length });
   }
   for (const r of b.rooms) {
     const rs = state.rooms[r.id];
@@ -274,9 +286,11 @@ function renderBoard() {
     const here = state.players.filter((p) => p.room === r.id && p.status === 'in');
     here.forEach((p, i) => { const cx = rx + 16 + i * 24, cy = ry + 2; const cur = p.id === state.currentPlayer; s += `<g class="pawn-g">${cur ? `<circle cx="${cx}" cy="${cy}" r="11" class="pawn-ring" fill="none" stroke="${COLOR[p.color]}"/>` : ''}<circle cx="${cx}" cy="${cy}" r="11" class="pawn" fill="${COLOR[p.color]}"><title>${p.name}${cur ? ' (taking their turn)' : ''}</title></circle><text x="${cx}" y="${cy + 4}" class="pawn-l">${p.name[0].toUpperCase()}</text></g>`; });
   }
-  $('board').innerHTML = s;
-  $('board').querySelectorAll('[data-mv]').forEach((g) => { g.onclick = () => act({ type: 'move', to: g.dataset.mv }); });
-  $('board').querySelectorAll('[data-tp]').forEach((g) => { g.onclick = () => { teleportMode = false; act({ type: 'teleport', to: g.dataset.tp }); }; });
+  // hazard labels last so they sit on top of everything
+  for (const l of labels) s += `<rect x="${l.x - l.w / 2}" y="${l.y - 12}" width="${l.w}" height="24" rx="7" class="tlabel-bg"/><text x="${l.x}" y="${l.y + 5}" class="tlabel">${l.text}</text>`;
+  svg.innerHTML = s;
+  svg.querySelectorAll('[data-mv]').forEach((g) => { g.onclick = () => act({ type: 'move', to: g.dataset.mv }); });
+  svg.querySelectorAll('[data-tp]').forEach((g) => { g.onclick = () => { teleportMode = false; act({ type: 'teleport', to: g.dataset.tp }); }; });
   renderHud(moves, tele);
 }
 

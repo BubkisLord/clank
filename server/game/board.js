@@ -105,7 +105,7 @@ export class Board {
 }
 
 export const CLASSIC_GEOMETRY = { width: 1000, height: 1000, roomW: 176, roomH: 80, depthsY: 430 };
-const RANDOM_GEOMETRY = { width: 1240, height: 1260, roomW: 190, roomH: 84, depthsY: 578 };
+const RANDOM_GEOMETRY = { width: 1500, height: 1000, roomW: 180, roomH: 78, depthsY: 470 };
 
 // --- geometry helpers for the generator ---
 function segIntersectsRect(p, q, cx, cy, hw, hh) {
@@ -167,12 +167,12 @@ export function generateBoard(seed = Math.floor(Math.random() * 2 ** 31)) {
   // --- rooms on a jittered grid (wide canvas, generous row spacing) ---
   const G = RANDOM_GEOMETRY;
   const rowSpec = [
-    { y: 215, n: 3, depths: false }, { y: 365, n: 4, depths: false }, { y: 505, n: 4, depths: false },
-    { y: 660, n: 4, depths: true }, { y: 810, n: 4, depths: true }, { y: 960, n: 4, depths: true }, { y: 1120, n: 3 + (rnd() < 0.5 ? 1 : 0), depths: true },
+    { y: 175, n: 4, depths: false }, { y: 295, n: 5, depths: false }, { y: 410, n: 5, depths: false },
+    { y: 540, n: 5, depths: true }, { y: 660, n: 5, depths: true }, { y: 780, n: 5, depths: true }, { y: 910, n: 4 + (rnd() < 0.5 ? 1 : 0), depths: true },
   ];
-  const rooms = [{ id: 'start', name: 'Outside the Dungeon', x: G.width / 2, y: 70, start: true, row: 0 }];
+  const rooms = [{ id: 'start', name: 'Outside the Dungeon', x: G.width / 2, y: 55, start: true, row: 0 }];
   const rows = [[rooms[0]]];
-  const xMin = 170, xMax = G.width - 170;
+  const xMin = 160, xMax = G.width - 160;
   rowSpec.forEach((spec, ri) => {
     const row = [];
     for (let i = 0; i < spec.n; i++) {
@@ -215,7 +215,7 @@ export function generateBoard(seed = Math.floor(Math.random() * 2 ** 31)) {
       for (const r of row) linkClean([...above].sort((a, b) => dist(a, r) - dist(b, r)), r, true);
       for (const r of row) {
         const sorted = [...above].sort((a, b) => dist(a, r) - dist(b, r)).filter((a) => !edges.has(key(a.id, r.id)));
-        if (sorted[0] && rnd() < 0.42 && Math.abs(sorted[0].x - r.x) < 420 && !blocked(sorted[0], r)) link(sorted[0], r);
+        if (sorted[0] && rnd() < 0.42 && Math.abs(sorted[0].x - r.x) < 380 && !blocked(sorted[0], r)) link(sorted[0], r);
       }
     }
   }
@@ -280,8 +280,8 @@ export function generateBoard(seed = Math.floor(Math.random() * 2 ** 31)) {
     market: () => ({ feature: 'market', market: true }), crystal: () => ({ feature: 'crystal', crystal: true }), fountain: () => ({ feature: 'fountain', fountain: true }),
     monkey: () => ({ feature: 'monkey', monkeyShrine: true }), major: () => ({ feature: 'major', majorSecret: true }), minor: () => ({ feature: 'minor', minorSecrets: 2 }), plain: () => ({ feature: 'plain' }),
   };
-  const surfacePool = ['market', 'crystal', 'fountain', 'major', 'minor', 'minor', 'minor', 'plain', 'plain'].map((k) => featureDefs[k]());
-  const depthsPool = ['market', 'market', 'crystal', 'crystal', 'crystal', 'fountain', 'monkey', 'major', 'major', 'major', 'minor', 'minor', 'minor', 'plain'].map((k) => featureDefs[k]());
+  const surfacePool = ['market', 'crystal', 'fountain', 'major', 'minor', 'minor', 'minor', 'minor', 'plain', 'plain', 'plain', 'plain'].map((k) => featureDefs[k]());
+  const depthsPool = ['market', 'market', 'crystal', 'crystal', 'crystal', 'fountain', 'fountain', 'monkey', 'major', 'major', 'major', 'minor', 'minor', 'minor', 'minor', 'plain', 'plain', 'plain'].map((k) => featureDefs[k]());
   // never a crystal cave directly off the entrance row
   dealt(surfacePool, surface.filter((r) => r.row !== 1 || true));
   dealt(depthsPool, depths);

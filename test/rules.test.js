@@ -192,3 +192,13 @@ test('other players can see the current player hand but not each other', () => {
   const v2 = g.stateFor(p.id);
   assert.equal(v2.players.find((x) => x.id === other.id).hand, undefined);
 });
+
+test('every dragon attack gets a new number, even after the chronicle is full', () => {
+  const g = setup();
+  for (let i = 0; i < 400; i++) g.log('filler');
+  g.dragonAttack(0, 'test');
+  const a = g.lastAttack.seq;
+  g.dragonAttack(0, 'test');
+  assert.equal(g.lastAttack.seq, a + 1);
+  assert.equal(g.stateFor(g.players[0].id).attacks.at(-1).seq, a + 1);
+});

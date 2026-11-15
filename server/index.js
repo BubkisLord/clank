@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { Game, GameError } from './game/engine.js';
 import { randomCode } from './game/util.js';
+import { nextAction, BOT_NAMES } from './game/ai.js';
+
+const BOT_DELAY = Number(process.env.BOT_DELAY || 850); // ms between bot actions, so people can follow along
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -48,6 +51,34 @@ function broadcast(entry) {
     const state = game.stateFor(pid);
     for (const ws of set) send(ws, { type: 'state', state });
   }
+  scheduleBots(entry);
+}
+
+// ---------------- computer players ----------------
+function scheduleBots(entry) {
+  const { game } = entry;
+  if (entry.botTimer || game.phase !== 'playing' || entry.sockets.size === 0) return; // pause when nobody is watching
+  const actorId = game.pending ? game.pending.pid : game.currentPlayer()?.id;
+  const bot = game.playerById(actorId);
+  if (!bot?.bot) return;
+  entry.botTimer = setTimeout(() => {
+    entry.botTimer = null;
+    if (games.get(game.code) !== entry) return;
+    const key = `${game.turnNumber}:${bot.id}`;
+    if (entry.botTurn !== key) { entry.botTurn = key; entry.botSteps = 0; }
+    let action = nextAction(game, bot);
+    if (action && ++entry.botSteps > 80 && !game.pending) action = { type: 'endTurn' }; // never loop forever
+    if (action) {
+      try { game.act(bot.id, action); }
+      catch (e) {
+        console.warn(`bot ${bot.name} tried ${JSON.stringify(action)}: ${e.message}`);
+        try { if (game.pending?.pid === bot.id) game.act(bot.id, { type: 'resolve', value: game.pending.options[0].value }); else game.act(bot.id, { type: 'endTurn' }); }
+        catch (e2) { console.error('bot recovery failed', e2); }
+      }
+      entry.lastActivity = Date.now();
+    }
+    broadcast(entry);
+  }, game.pending ? BOT_DELAY * 1.2 : BOT_DELAY);
 }
 
 function attach(ws, entry, player) {
@@ -67,6 +98,7 @@ function detach(ws) {
   const set = entry.sockets.get(ws.playerId);
   if (set) { set.delete(ws); if (set.size === 0) { entry.sockets.delete(ws.playerId); const p = entry.game.playerById(ws.playerId); if (p) p.connected = false; } }
   if (entry.game.phase === 'lobby' && !entry.sockets.has(ws.playerId)) entry.game.removePlayer(ws.playerId);
+  if (entry.game.players.every((p) => p.bot)) { clearTimeout(entry.botTimer); games.delete(entry.game.code); return; } // only bots left
   entry.lastActivity = Date.now();
   broadcast(entry);
 }
@@ -110,6 +142,17 @@ wss.on('connection', (ws) => {
           if (!entry) throw new GameError('Not in a game');
           if (entry.game.players[0]?.id !== ws.playerId) throw new GameError('Only the host can change options');
           entry.game.setOption(msg.key, msg.value);
+          broadcast(entry);
+          break;
+        }
+        case 'addBot': {
+          const entry = games.get(ws.gameCode);
+          if (!entry) throw new GameError('Not in a game');
+          const { game } = entry;
+          if (game.players[0]?.id !== ws.playerId) throw new GameError('Only the host can add computer players');
+          const taken = new Set(game.players.map((p) => p.name));
+          const name = BOT_NAMES.filter((n) => !taken.has(n))[Math.floor(Math.random() * BOT_NAMES.filter((n) => !taken.has(n)).length)] || 'Bot';
+          game.addPlayer(name, { bot: true });
           broadcast(entry);
           break;
         }

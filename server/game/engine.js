@@ -21,6 +21,9 @@ export class Game {
     this.phase = 'lobby';
     this.players = [];
     this.logs = [];
+    this.logSeq = 0;
+    this.attacks = []; // recent dragon attacks, numbered so clients never miss one
+    this.attackSeq = 0;
     this.version = 0;
     this.createdAt = Date.now();
     this.options = { map: 'random', autoEnd: true };
@@ -34,7 +37,7 @@ export class Game {
   }
 
   // ---------------- lobby ----------------
-  addPlayer(name) {
+  addPlayer(name, { bot = false } = {}) {
     if (this.phase !== 'lobby') fail('Game already started');
     if (this.players.length >= MAX_PLAYERS) fail('Game is full');
     const p = {
@@ -44,6 +47,8 @@ export class Game {
       damage: 0, supply: CLANK_SUPPLY, gold: 0, room: 'start', artifacts: [], secrets: [],
       items: { masterKey: 0, backpack: 0, crowns: [] }, monkeyIdols: 0, mastery: false,
       status: 'in', koRescued: false, onCountdown: false,
+      // bots get a random temperament: <1 plays it safe, >1 pushes deeper for bigger artifacts
+      bot: bot ? { risk: 0.75 + Math.random() * 0.6 } : null,
     };
     this.players.push(p);
     this.log(`${p.name} joined`);
@@ -56,6 +61,9 @@ export class Game {
     if (i >= 0) {
       this.log(`${this.players[i].name} ${reason}`);
       this.players.splice(i, 1);
+      // the host (seat 0) must be a person
+      const human = this.players.findIndex((p) => !p.bot);
+      if (human > 0) this.players.unshift(...this.players.splice(human, 1));
       this.players.forEach((p, j) => { p.color = COLORS[j]; });
     }
   }
@@ -131,7 +139,7 @@ export class Game {
 
   // ---------------- helpers ----------------
   log(t) {
-    this.logs.push({ n: this.logs.length, t });
+    this.logs.push({ n: this.logSeq++, t });
     if (this.logs.length > 300) this.logs.shift();
   }
 
@@ -273,7 +281,11 @@ export class Game {
       this.dealDamage(p, 1, 'dragon');
     }
     this.log(`DRAGON ATTACK (${reason}): ${n} cube${n === 1 ? '' : 's'} drawn — ${drawn.length ? drawn.join(', ') : 'bag empty'}`);
-    this.lastAttack = { n, drawn, at: this.logs.length };
+    const hit = {};
+    for (const c of drawn) if (c !== 'black') { const p = this.players.find((x) => x.color === c); if (p) hit[p.id] = (hit[p.id] || 0) + 1; }
+    this.lastAttack = { seq: ++this.attackSeq, n, drawn, reason, hits: Object.entries(hit).map(([pid, dmg]) => ({ pid, dmg })) };
+    this.attacks.push(this.lastAttack);
+    if (this.attacks.length > 6) this.attacks.shift();
   }
 
   knockOut(p) {
@@ -625,7 +637,7 @@ export class Game {
     const cardView = (c) => ({ uid: c.uid, id: c.id });
     const cur = this.phase === 'playing' ? this.currentPlayer() : null;
     const players = this.players.map((p) => ({
-      id: p.id, name: p.name, color: p.color, connected: p.connected, status: p.status, koRescued: p.koRescued, onCountdown: p.onCountdown,
+      id: p.id, name: p.name, color: p.color, bot: !!p.bot, connected: p.connected, status: p.status, koRescued: p.koRescued, onCountdown: p.onCountdown,
       room: p.room, damage: p.damage, supply: p.supply, gold: p.gold, artifacts: p.artifacts, secrets: p.secrets.map((s) => ({ uid: s.uid, id: s.id })),
       items: p.items, monkeyIdols: p.monkeyIdols, mastery: p.mastery, clankArea: this.clankArea?.[p.id] ?? 0, inBag: this.bag?.[p.id] ?? 0,
       deckCount: p.deck.length, handCount: p.hand.length, discard: p.discard.map(cardView), playArea: p.playArea.map(cardView), trashedCount: p.trashed.length,
@@ -654,6 +666,7 @@ export class Game {
       legal: me ? this.legalFor(me) : null,
       results: this.results || null,
       lastAttack: this.lastAttack || null,
+      attacks: this.attacks, attackSeq: this.attackSeq,
     };
   }
 }

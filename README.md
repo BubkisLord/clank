@@ -75,6 +75,16 @@ running out of cubes, knock-out/rescue rules, Mastery token (20), Countdown Trac
 Picking up secrets and Monkey Idols happens automatically on entering a room (one per entry);
 artifacts are taken with a button, as per the updated FAQ rule.
 
+## Computer players
+
+The host can press **Add computer player** in the lobby to fill a seat with an AI thief
+(`server/game/ai.js`). It is a hand-written strategy rather than a trained neural network. It
+values cards by what they produce, routes to the artifact worth the most for the danger, and
+heads for the exit once it has loot, is hurt, or someone else has escaped. Each bot gets a
+random appetite for risk. Bots act about once every 0.85 seconds so you can watch them play.
+Set the `BOT_DELAY` environment variable, in milliseconds, to change that. They pause while
+no human is connected.
+
 ## Accuracy notes
 
 Rules, secret tokens and market items follow the official rulebook and FAQ. The dungeon-deck

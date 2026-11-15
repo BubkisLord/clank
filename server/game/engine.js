@@ -8,6 +8,11 @@ const COLORS = ['red', 'blue', 'green', 'yellow'];
 const MAX_PLAYERS = 4;
 
 class GameError extends Error {}
+// Player names are shown to everyone: strip markup characters, collapse whitespace, cap length.
+export function cleanName(raw) {
+  const n = String(raw ?? '').replace(/[<>&"'`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 20);
+  return n || 'Nameless Thief';
+}
 const fail = (m) => { throw new GameError(m); };
 
 export class Game {
@@ -33,7 +38,7 @@ export class Game {
     if (this.phase !== 'lobby') fail('Game already started');
     if (this.players.length >= MAX_PLAYERS) fail('Game is full');
     const p = {
-      id: uid('p'), token: uid('t') + uid('t'), name: String(name || 'Thief').slice(0, 20),
+      id: uid('p'), token: uid('t') + uid('t'), name: cleanName(name),
       color: COLORS[this.players.length], connected: true,
       deck: [], hand: [], discard: [], playArea: [], trashed: [],
       damage: 0, supply: CLANK_SUPPLY, gold: 0, room: 'start', artifacts: [], secrets: [],

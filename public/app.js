@@ -1,5 +1,6 @@
 /* Clank! browser client */
 const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 let STATIC = null;       // cards, secrets, board
 let ws = null;
 let state = null;
@@ -32,7 +33,7 @@ function connect() {
       const seats = savedSeats(code);
       if (session) send({ type: 'join', code, name: session.name, token: session.token });
       else if (seats.length) {
-        $('rejoin').innerHTML = seats.map((s, i) => `<button class="primary" data-seat="${i}">Rejoin game ${code} as ${s.name}</button>`).join('');
+        $('rejoin').innerHTML = seats.map((s, i) => `<button class="primary" data-seat="${i}">Rejoin game ${code} as ${esc(s.name)}</button>`).join('');
         $('rejoin').classList.remove('hidden');
         $('rejoin').querySelectorAll('button').forEach((b) => { b.onclick = () => { const s = seats[Number(b.dataset.seat)]; send({ type: 'join', code, name: s.name, token: s.token }); }; });
       }
@@ -91,7 +92,7 @@ $('name').onchange = () => localStorage.setItem('clank:name', $('name').value);
 async function refreshOpenGames() {
   try {
     const list = await (await fetch('/api/games')).json();
-    $('openGames').innerHTML = list.length ? '<div class="muted">Open games:</div>' + list.map((g) => `<button data-code="${g.code}">${g.code} — ${g.players.join(', ')}</button>`).join('') : '';
+    $('openGames').innerHTML = list.length ? '<div class="muted">Open games:</div>' + list.map((g) => `<button data-code="${g.code}">${g.code} — ${esc(g.players.join(', '))}</button>`).join('') : '';
     $('openGames').querySelectorAll('button').forEach((b) => { b.onclick = () => send({ type: 'join', code: b.dataset.code, name: $('name').value || 'Thief' }); });
   } catch { /* ignore */ }
 }
@@ -149,7 +150,7 @@ function render() {
     $('waitCode').textContent = state.code;
     $('shareLink').textContent = `${location.origin}/?g=${state.code}`;
     const host = state.players[0].id === me;
-    $('waitPlayers').innerHTML = state.players.map((p, i) => `<li style="border-color:${COLOR[p.color]}"><span>${p.name}${i === 0 ? ' <em>host</em>' : ''}${p.id === me ? ' <em>you</em>' : ''}</span>${host && i > 0 ? `<button class="kick" data-kick="${p.id}" title="Remove ${p.name} from the game">Kick</button>` : ''}</li>`).join('');
+    $('waitPlayers').innerHTML = state.players.map((p, i) => `<li style="border-color:${COLOR[p.color]}"><span>${esc(p.name)}${i === 0 ? ' <em>host</em>' : ''}${p.id === me ? ' <em>you</em>' : ''}</span>${host && i > 0 ? `<button class="kick" data-kick="${p.id}" title="Remove ${esc(p.name)} from the game">Kick</button>` : ''}</li>`).join('');
     $('waitPlayers').querySelectorAll('[data-kick]').forEach((b) => { b.onclick = () => { if (confirm(`Remove ${b.title.replace('Remove ', '').replace(' from the game', '')} from the game?`)) send({ type: 'kick', playerId: b.dataset.kick }); }; });
     $('startBtn').disabled = !host;
     const o = state.options || {};
@@ -170,11 +171,11 @@ function renderPlayers() {
     const loot = [...p.artifacts.map((a) => `🏺${a}`), p.monkeyIdols ? `🐒${p.monkeyIdols}` : '', p.items.masterKey ? '🔑' : '', p.items.backpack ? '🎒' : '', ...p.items.crowns.map((c) => `👑${c}`), p.mastery ? '🏅' : '', secretIcons].filter(Boolean).join(' ');
     const hp = Array.from({ length: 10 }, (_, i) => `<i class="${i < 10 - p.damage ? '' : 'off'}"></i>`).join('');
     const cubes = Array.from({ length: Math.min(p.clankArea, 30) }, () => `<i style="background:${COLOR[p.color]}"></i>`).join('');
-    const title = `${p.name}: ${10 - p.damage}/10 health · ${p.clankArea} Clank in the area, ${p.inBag} in the bag, ${p.supply} in supply · deck ${p.deckCount}, hand ${p.handCount}, discard ${p.discard.length}${p.connected ? '' : ' · disconnected'}`;
+    const title = `${esc(p.name)}: ${10 - p.damage}/10 health · ${p.clankArea} Clank in the area, ${p.inBag} in the bag, ${p.supply} in supply · deck ${p.deckCount}, hand ${p.handCount}, discard ${p.discard.length}${p.connected ? '' : ' · disconnected'}`;
     return `<div class="pl ${p.id === state.currentPlayer ? 'current' : ''} ${p.status !== 'in' ? 'out' : ''}" title="${title} — click to inspect their cards" data-inspect="${p.id}">
-      <div class="av" style="background:${COLOR[p.color]}">${p.name[0].toUpperCase()}</div>
+      <div class="av" style="background:${COLOR[p.color]}">${esc(p.name[0].toUpperCase())}</div>
       <div style="min-width:0;flex:1">
-        <div class="nm"><span>${p.name}${p.id === me ? ' ✦' : ''}${p.connected ? '' : ' ⚠'}</span><span class="g" title="Points if they made it out now">${p.score ?? 0} pts · ${p.gold}g</span></div>
+        <div class="nm"><span>${esc(p.name)}${p.id === me ? ' ✦' : ''}${p.connected ? '' : ' ⚠'}</span><span class="g" title="Points if they made it out now">${p.score ?? 0} pts · ${p.gold}g</span></div>
         <div class="loot">${loot}</div>
         <div class="hp" title="Health ${10 - p.damage}/10">${hp}</div>
         <div class="st">${st}${p.onCountdown ? ' · countdown' : ''}</div>
@@ -200,7 +201,7 @@ function showCards(p) {
   ];
   if (p.id === me) sections.splice(1, 0, ['Hand', p.hand || [], '', false]);
   const pts = p.score != null ? ` · ${p.score} pts if they left now` : '';
-  $('viewerTitle').innerHTML = `<span>${p.name}'s cards${pts}</span><button id="viewerClose" class="defer">✕ Close</button>`;
+  $('viewerTitle').innerHTML = `<span>${esc(p.name)}'s cards${pts}</span><button id="viewerClose" class="defer">✕ Close</button>`;
   $('viewerBody').innerHTML = sections.map(([title, cards, note, grouped]) => `<div class="vsec"><h4>${title} <span class="muted">${note}</span></h4><div class="cards small">${cards.length ? (grouped ? groupCards(cards).map((g) => cardHTML(g.def, { count: g.n > 1 ? g.n : undefined })).join('') : cards.map((c) => cardHTML(cdef(c))).join('')) : '<span class="muted">empty</span>'}</div></div>`).join('');
   $('viewer').classList.remove('hidden');
   $('viewerClose').onclick = () => $('viewer').classList.add('hidden');
@@ -208,7 +209,7 @@ function showCards(p) {
 
 function renderDragon() {
   const track = STATIC.rules.rageTrack.map((v, i) => `<b class="${i === state.rage ? 'on' : i < state.rage ? 'past' : ''}">${v}</b>`).join('');
-  const cd = state.countdown ? `<div class="dm">⏳ ${state.players.find((p) => p.id === state.countdown.pid).name} on countdown space <b>${state.countdown.pos + 1}/5</b></div>` : '';
+  const cd = state.countdown ? `<div class="dm">⏳ ${esc(state.players.find((p) => p.id === state.countdown.pid).name)} on countdown space <b>${state.countdown.pos + 1}/5</b></div>` : '';
   $('dragon').innerHTML = `<div class="rt"><img src="assets/dragon.svg" alt="">Rage <span class="rage">${track}</span>${state.danger ? `<span title="Danger cards in the row">+${state.danger}☠</span>` : ''}</div>
     <div class="dm">Next attack draws <b>${state.rageValue + state.danger}</b> · bag <b>${state.bag.total}</b> (${state.bag.black} black) · deck <b>${state.dungeonDeckCount}</b></div>${cd}`;
 }
@@ -282,9 +283,9 @@ function renderBoard() {
     s += `<g ${click}><title>${title}</title><clipPath id="clip-${r.id}"><rect x="${rx}" y="${ry}" width="${W}" height="${H}" rx="12"/></clipPath>
       <image href="assets/tiles/tile-${tileFor(r)}.jpg" x="${rx}" y="${ry}" width="${W}" height="${H}" preserveAspectRatio="xMidYMid slice" clip-path="url(#clip-${r.id})"/>
       <rect x="${rx}" y="${ry}" width="${W}" height="${H}" rx="12" class="${cls.join(' ')}"/>
-      <text x="${r.x}" y="${r.y + 6}" class="rname">${r.name}</text><text x="${r.x}" y="${r.y + 26}" class="rinfo">${info.join('   ')}</text></g>`;
+      <text x="${r.x}" y="${r.y + 6}" class="rname">${esc(r.name)}</text><text x="${r.x}" y="${r.y + 26}" class="rinfo">${info.join('   ')}</text></g>`;
     const here = state.players.filter((p) => p.room === r.id && p.status === 'in');
-    here.forEach((p, i) => { const cx = rx + 16 + i * 24, cy = ry + 2; const cur = p.id === state.currentPlayer; s += `<g class="pawn-g">${cur ? `<circle cx="${cx}" cy="${cy}" r="11" class="pawn-ring" fill="none" stroke="${COLOR[p.color]}"/>` : ''}<circle cx="${cx}" cy="${cy}" r="11" class="pawn" fill="${COLOR[p.color]}"><title>${p.name}${cur ? ' (taking their turn)' : ''}</title></circle><text x="${cx}" y="${cy + 4}" class="pawn-l">${p.name[0].toUpperCase()}</text></g>`; });
+    here.forEach((p, i) => { const cx = rx + 16 + i * 24, cy = ry + 2; const cur = p.id === state.currentPlayer; s += `<g class="pawn-g">${cur ? `<circle cx="${cx}" cy="${cy}" r="11" class="pawn-ring" fill="none" stroke="${COLOR[p.color]}"/>` : ''}<circle cx="${cx}" cy="${cy}" r="11" class="pawn" fill="${COLOR[p.color]}"><title>${esc(p.name)}${cur ? ' (taking their turn)' : ''}</title></circle><text x="${cx}" y="${cy + 4}" class="pawn-l">${esc(p.name[0].toUpperCase())}</text></g>`; });
   }
   // hazard labels last so they sit on top of everything
   for (const l of labels) s += `<rect x="${l.x - l.w / 2}" y="${l.y - 12}" width="${l.w}" height="24" rx="7" class="tlabel-bg"/><text x="${l.x}" y="${l.y + 5}" class="tlabel">${l.text}</text>`;
@@ -301,7 +302,7 @@ function renderHud(moves, tele) {
   let h = '';
   if (mp.status === 'in') {
     const feats = [r.crystal ? '💎 Crystal cave' : '', r.market ? '🛒 Market' : '', r.fountain ? '⛲ Fountain' : '', r.depths ? 'in the Depths' : '', r.start ? 'outside the dungeon' : ''].filter(Boolean).join(' · ');
-    h += `<div class="hud"><div class="k">You are in</div><div class="v">${r.name}</div>${feats ? `<div class="m">${feats}</div>` : ''}</div>`;
+    h += `<div class="hud"><div class="k">You are in</div><div class="v">${esc(r.name)}</div>${feats ? `<div class="m">${feats}</div>` : ''}</div>`;
   }
   if (isMyTurn() && !state.pending) {
     const exhausted = t.enteredCrystalCave && !t.flags.ignoreCrystalCaves;
@@ -309,7 +310,7 @@ function renderHud(moves, tele) {
     const tp = tele.size ? `<div class="m">✨ ${tele.size} room${tele.size > 1 ? 's' : ''} by teleport</div>` : '';
     h += `<div class="hud tunnels"><div class="k">${exhausted ? 'Exhausted — no more boots' : 'Tunnels from here'}</div>${rows}${tp}</div>`;
   } else if (state.pending && state.pending.pid !== me) {
-    h += `<div class="hud"><div class="m">${state.players.find((p) => p.id === state.pending.pid)?.name} is deciding…</div></div>`;
+    h += `<div class="hud"><div class="m">${esc(state.players.find((p) => p.id === state.pending.pid)?.name)} is deciding…</div></div>`;
   }
   $('boardHud').innerHTML = h;
 }
@@ -366,7 +367,7 @@ function renderMarket() {
 
 function renderLog() {
   const el = $('log');
-  el.innerHTML = state.logs.map((l) => `<div class="${l.t.startsWith('DRAGON ATTACK') ? 'attack' : l.t.startsWith('—') ? 'turn' : ''}">${l.t}</div>`).join('');
+  el.innerHTML = state.logs.map((l) => `<div class="${l.t.startsWith('DRAGON ATTACK') ? 'attack' : l.t.startsWith('—') ? 'turn' : ''}">${esc(l.t)}</div>`).join('');
   el.scrollTop = el.scrollHeight;
 }
 
@@ -379,7 +380,7 @@ function renderMe() {
   if (p.status === 'escaped' && mine) status = `You escaped${p.mastery ? ' with a Mastery token' : ''}! Spend what you have left, then end your turn.`;
   else if (p.status !== 'in') status = p.status === 'escaped' ? `You escaped${p.mastery ? ' with a Mastery token' : ''}! Waiting for the others…` : p.koRescued ? 'You were knocked out but rescued — your loot counts.' : 'You were knocked out in the dungeon. Better luck next heist.';
   else if (mine) status = state.pending ? 'Make your choice…' : p.hand.length ? 'Your turn — play your cards' : 'Spend your skill, swords and boots';
-  else status = `${cur?.name ?? '…'} is sneaking about${state.pending ? ' (deciding…)' : ''}`;
+  else status = `${esc(cur?.name ?? '…')} is sneaking about${state.pending ? ' (deciding…)' : ''}`;
   $('status').textContent = status;
   $('status').className = mine ? 'yours' : '';
 
@@ -442,7 +443,7 @@ function renderResults() {
   $('results').classList.remove('hidden');
   const rows = state.results.map((r, i) => {
     const b = r.breakdown;
-    return `<tr><td style="color:${COLOR[r.color]}">${i === 0 && r.total != null ? '🏆 ' : ''}${r.name}</td><td>${r.survived ? '' : 'lost'}</td><td>${b.artifacts}</td><td>${b.secrets + b.monkeyIdols}</td><td>${b.items}</td><td>${b.gold}</td><td>${b.cards + b.bonus}</td><td>${b.mastery}</td><th>${r.total ?? '—'}</th></tr>`;
+    return `<tr><td style="color:${COLOR[r.color]}">${i === 0 && r.total != null ? '🏆 ' : ''}${esc(r.name)}</td><td>${r.survived ? '' : 'lost'}</td><td>${b.artifacts}</td><td>${b.secrets + b.monkeyIdols}</td><td>${b.items}</td><td>${b.gold}</td><td>${b.cards + b.bonus}</td><td>${b.mastery}</td><th>${r.total ?? '—'}</th></tr>`;
   }).join('');
   $('resultsBody').innerHTML = `<table class="score"><tr><th>Player</th><th></th><th>Artifact</th><th>Secrets/Idols</th><th>Items</th><th>Gold</th><th>Cards</th><th>Mastery</th><th>Total</th></tr>${rows}</table>`;
 }

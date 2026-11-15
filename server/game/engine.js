@@ -1,6 +1,6 @@
 import { uid, shuffle } from './util.js';
 import { def, makeCard, publicDef, buildDungeonDeck, buildStartingDeck, buildReserve, allPublicDefs, CARD_DEFS } from './cards/index.js';
-import { ROOMS, roomById, tunnelsFrom, connectedRooms, RAGE_TRACK, RAGE_START, HEALTH_MAX, CLANK_SUPPLY, DRAGON_CUBES, MASTERY_POINTS, MARKET_PRICE, ARTIFACTS, publicBoard } from './board.js';
+import { RAGE_TRACK, RAGE_START, HEALTH_MAX, CLANK_SUPPLY, DRAGON_CUBES, MASTERY_POINTS, MARKET_PRICE, ARTIFACTS, classicBoard, generateBoard, publicRules } from './board.js';
 import { MAJOR_SECRETS, MINOR_SECRETS, SECRET_DEFS, buildSecretStack, publicSecretDefs } from './secrets.js';
 import { applyEffect, evalCondition } from './effects.js';
 
@@ -18,6 +18,14 @@ export class Game {
     this.logs = [];
     this.version = 0;
     this.createdAt = Date.now();
+    this.options = { map: 'random', autoEnd: true };
+  }
+
+  setOption(key, value) {
+    if (this.phase !== 'lobby') fail('Options can only be changed before the game starts');
+    if (key === 'map' && ['random', 'classic'].includes(value)) this.options.map = value;
+    else if (key === 'autoEnd') this.options.autoEnd = !!value;
+    else fail('Unknown option');
   }
 
   // ---------------- lobby ----------------
@@ -52,6 +60,8 @@ export class Game {
     const n = this.players.length;
     if (n < 1) fail('Need at least 1 player');
     this.phase = 'playing';
+    this.board = this.options.map === 'classic' ? classicBoard() : generateBoard();
+    this.log(this.options.map === 'classic' ? 'The classic dungeon awaits.' : 'A new dungeon has been carved out for this heist.');
 
     this.dungeonDeck = buildDungeonDeck();
     this.dungeonRow = [null, null, null, null, null, null];
@@ -77,7 +87,7 @@ export class Game {
     this.rooms = {};
     const majors = shuffle(buildSecretStack(MAJOR_SECRETS));
     const minors = shuffle(buildSecretStack(MINOR_SECRETS));
-    for (const r of ROOMS) {
+    for (const r of this.board.rooms) {
       const rs = { artifact: null, majorSecret: null, minorSecrets: [], monkeyIdols: 0 };
       if (r.artifact && !removed.includes(r.artifact)) rs.artifact = r.artifact;
       if (r.majorSecret) rs.majorSecret = majors.pop() || null;
@@ -132,7 +142,7 @@ export class Game {
     this.pending = { pid: p.id, title: spec.title, options: spec.options, resolve };
   }
 
-  process() {
+  process(depth = 0) {
     let guard = 0;
     while (!this.pending && this.queue.length && guard++ < 10000) {
       const { pid, e, card } = this.queue.shift();
@@ -142,8 +152,9 @@ export class Game {
     }
     if (!this.pending) {
       this.checkConditionals();
-      if (this.queue.length) return this.process();
-      this.afterProcess();
+      if (this.queue.length) return this.process(depth);
+      const turnChanged = this.afterProcess();
+      if (turnChanged && this.queue.length && depth < 50) return this.process(depth + 1);
     }
     this.version++;
   }
@@ -161,11 +172,18 @@ export class Game {
   }
 
   afterProcess() {
-    if (this.phase !== 'playing') return;
+    if (this.phase !== 'playing') return false;
     const p = this.currentPlayer();
+    let changed = false;
     // current player knocked out mid-turn: their turn ends immediately
-    if (this.turn && p.status === 'ko') this.finishTurn();
+    if (this.turn && p.status === 'ko') { this.finishTurn(); changed = true; }
+    // nothing left to do: end the turn automatically
+    else if (this.turn && this.options.autoEnd && p.hand.length === 0 && !this.pending) {
+      const L = this.legalFor(p);
+      if (L && !L.hasAction) { this.log(`${p.name} has nothing left to do — turn ends`); this.finishTurn(); changed = true; }
+    }
     this.checkGameEnd();
+    return changed;
   }
 
   drawCards(p, n, silent = false) {
@@ -256,7 +274,7 @@ export class Game {
   knockOut(p) {
     if (p.status !== 'in') return;
     p.status = 'ko';
-    p.koRescued = p.artifacts.length > 0 && !roomById[p.room].depths;
+    p.koRescued = p.artifacts.length > 0 && !this.board.room(p.room).depths;
     this.log(`${p.name} is knocked out${p.koRescued ? ' and rescued by the townsfolk' : ' and lost in the dungeon'}!`);
     this.markOut(p);
   }
@@ -290,8 +308,8 @@ export class Game {
     this.log('Game over! ' + (this.results[0].total != null ? `${this.results[0].name} is the Greatest Thief in the Realm!` : 'Nobody escaped.'));
   }
 
-  score(p) {
-    const survived = p.status === 'escaped' || (p.status === 'ko' && p.koRescued);
+  score(p, assumeSurvived = false) {
+    const survived = assumeSurvived || p.status === 'escaped' || (p.status === 'ko' && p.koRescued);
     const all = [...p.deck, ...p.hand, ...p.discard, ...p.playArea];
     const b = {
       artifacts: p.artifacts.reduce((s, v) => s + v, 0),
@@ -316,7 +334,7 @@ export class Game {
       if (p.onCountdown) { this.countdownStep(p); if (this.phase !== 'playing') return; this.turnIdx = (this.turnIdx + 1) % this.players.length; continue; }
       if (p.status !== 'in') { this.turnIdx = (this.turnIdx + 1) % this.players.length; continue; }
       this.turnNumber++;
-      this.turn = { skill: 0, swords: 0, boots: 0, clankMade: 0, negativeClank: 0, teleports: 0, flags: {}, enteredCrystalCave: false, conditionals: [], gemDiscount: 0, skillPerClank: 0 };
+      this.turn = { skill: 0, swords: 0, boots: 0, clankMade: 0, negativeClank: 0, teleports: 0, flags: {}, enteredCrystalCave: false, conditionals: [], gemDiscount: 0, skillPerClank: 0, deferred: [] };
       this.log(`— ${p.name}'s turn —`);
       return;
     }
@@ -337,6 +355,8 @@ export class Game {
 
   finishTurn() {
     const p = this.currentPlayer();
+    if (this.turn?.deferred.length) this.log(`${p.name} lets ${this.turn.deferred.length} postponed choice${this.turn.deferred.length > 1 ? 's' : ''} lapse`);
+    if (p.hand.length) this.log(`${p.name} discards ${p.hand.length} unplayed card${p.hand.length > 1 ? 's' : ''}`);
     p.discard.push(...p.playArea, ...p.hand);
     p.playArea = [];
     p.hand = [];
@@ -382,7 +402,7 @@ export class Game {
   enterRoom(p, rid) {
     const t = this.turn;
     p.room = rid;
-    const r = roomById[rid];
+    const r = this.board.room(rid);
     this.log(`${p.name} moves to ${r.name}`);
     if (r.start) return this.escape(p);
     if (r.crystal && !t.flags.ignoreCrystalCaves) { t.enteredCrystalCave = true; this.log(`${p.name} is exhausted by the Crystal Cave`); }
@@ -395,10 +415,11 @@ export class Game {
   // ---------------- legal move computation (for the UI) ----------------
   legalFor(p) {
     const t = this.turn;
-    if (!t || this.currentPlayer() !== p || p.status !== 'in' || this.pending) return null;
+    if (!t || this.currentPlayer() !== p || this.pending) return null;
     const moves = [];
     const exhausted = t.enteredCrystalCave && !t.flags.ignoreCrystalCaves;
-    for (const tn of tunnelsFrom(p.room)) {
+    const inDungeon = p.status === 'in';
+    for (const tn of inDungeon ? this.board.tunnelsFrom(p.room) : []) {
       const cost = tn.boots || 1;
       const monsters = t.flags.ignoreMonsterTunnels ? 0 : (tn.monsters || 0);
       const swordsUsed = Math.min(t.swords, monsters);
@@ -411,16 +432,26 @@ export class Game {
       else if (dmg > 0 && (p.supply < dmg || p.damage + dmg >= HEALTH_MAX)) reason = 'Too dangerous';
       moves.push({ to: tn.to, cost, monsters, swordsUsed, damage: dmg, locked: !!tn.locked, ok: !reason, reason, via: 'move' });
     }
-    const teleports = t.teleports > 0 ? connectedRooms(p.room).filter((r) => r !== 'start' || p.artifacts.length > 0) : [];
+    const teleports = t.teleports > 0 && inDungeon ? this.board.connectedRooms(p.room).filter((r) => r !== 'start' || p.artifacts.length > 0) : [];
     const rs = this.rooms[p.room];
     const capacity = 1 + p.items.backpack;
-    const canTakeArtifact = !!(rs && rs.artifact && p.artifacts.length < capacity);
-    const inMarket = !!roomById[p.room].market;
+    const canTakeArtifact = !!(inDungeon && rs && rs.artifact && p.artifacts.length < capacity);
+    const inMarket = inDungeon && !!this.board.room(p.room).market;
     const canBuy = inMarket && p.gold >= MARKET_PRICE ? Object.entries({ masterKey: this.market.masterKey, backpack: this.market.backpack, crown: this.market.crowns.length }).filter(([, n]) => n > 0).map(([k]) => k) : [];
     const acquirable = this.dungeonRow.map((c, i) => c && def(c).kind !== 'monster' && this.cardCost(def(c)) <= t.skill ? i : null).filter((x) => x !== null);
     const fightable = this.dungeonRow.map((c, i) => c && def(c).kind === 'monster' && def(c).swords <= t.swords ? i : null).filter((x) => x !== null);
     const reserveBuy = Object.keys(this.reserve).filter((id) => this.reserve[id] > 0 && CARD_DEFS[id].cost <= t.skill);
-    return { moves, teleports, canTakeArtifact, canBuy, acquirable, fightable, reserveBuy, canFightGoblin: t.swords >= 2, canEndTurn: p.hand.length === 0, mustPlayCards: p.hand.length > 0 };
+    const usefulSecrets = p.secrets.filter((sx) => {
+      const d = SECRET_DEFS[sx.id];
+      if (d.use !== 'held') return false;
+      const eff = d.effects[0];
+      if (eff.heal) return p.damage > 0;
+      if (eff.boots) return moves.some((m) => !m.ok && m.reason && m.reason.startsWith('Need') && m.cost <= t.boots + eff.boots);
+      if (eff.swords) return this.dungeonRow.some((c) => c && def(c).kind === 'monster' && def(c).swords <= t.swords + eff.swords) || t.swords + eff.swords >= 2;
+      return true;
+    }).map((sx) => sx.uid);
+    const hasAction = moves.some((m) => m.ok) || teleports.length > 0 || canTakeArtifact || canBuy.length > 0 || acquirable.length > 0 || fightable.length > 0 || reserveBuy.length > 0 || t.swords >= 2 || usefulSecrets.length > 0 || t.deferred.length > 0;
+    return { moves, teleports, canTakeArtifact, canBuy, acquirable, fightable, reserveBuy, canFightGoblin: t.swords >= 2, canEndTurn: true, mustPlayCards: p.hand.length > 0, usefulSecrets, hasAction, deferred: t.deferred.map((d, i) => ({ i, title: d.title })) };
   }
 
   cardCost(d) {
@@ -435,6 +466,14 @@ export class Game {
     const p = this.playerById(pid);
     if (!p) fail('Unknown player');
     if (a.type === 'resolve') return this.resolvePending(p, a.value);
+    if (a.type === 'defer') {
+      if (!this.pending || this.pending.pid !== p.id) fail('Nothing to postpone');
+      if (!this.turn || this.currentPlayer() !== p) fail('Not your turn');
+      this.turn.deferred.push(this.pending);
+      this.pending = null;
+      this.log(`${p.name} postpones a choice`);
+      return this.process();
+    }
     if (this.pending) fail('Waiting for a decision');
     if (this.currentPlayer() !== p || !this.turn) fail('Not your turn');
     const t = this.turn;
@@ -491,7 +530,7 @@ export class Game {
       }
       case 'teleport': {
         if (t.teleports <= 0) fail('No teleport available');
-        if (!connectedRooms(p.room).includes(a.to)) fail('Not connected');
+        if (!this.board.connectedRooms(p.room).includes(a.to)) fail('Not connected');
         if (a.to === 'start' && p.artifacts.length === 0) fail('Need an Artifact to leave');
         t.teleports--;
         this.log(`${p.name} teleports`);
@@ -509,7 +548,7 @@ export class Game {
         break;
       }
       case 'buy': {
-        if (!roomById[p.room].market) fail('Not in a Market room');
+        if (!this.board.room(p.room).market) fail('Not in a Market room');
         if (p.gold < MARKET_PRICE) fail(`Need ${MARKET_PRICE} gold`);
         if (a.item === 'masterKey' && this.market.masterKey > 0) { this.market.masterKey--; p.items.masterKey++; }
         else if (a.item === 'backpack' && this.market.backpack > 0) { this.market.backpack--; p.items.backpack++; }
@@ -530,8 +569,17 @@ export class Game {
         break;
       }
       case 'endTurn': {
-        if (p.hand.length > 0) fail('You must play all cards in your hand');
         this.finishTurn();
+        break;
+      }
+      case 'defer': {
+        fail('Nothing to postpone');
+      }
+      case 'resume': {
+        const d = t.deferred[a.index];
+        if (!d) fail('No postponed choice there');
+        t.deferred.splice(a.index, 1);
+        this.pending = d;
         break;
       }
       default: fail(`Unknown action ${a.type}`);
@@ -561,7 +609,7 @@ export class Game {
 
   // ---------------- public state ----------------
   static staticData() {
-    return { cards: allPublicDefs(), secrets: publicSecretDefs(), board: publicBoard(), marketPrice: MARKET_PRICE, healthMax: HEALTH_MAX };
+    return { cards: allPublicDefs(), secrets: publicSecretDefs(), rules: publicRules(), marketPrice: MARKET_PRICE, healthMax: HEALTH_MAX };
   }
 
   stateFor(pid) {
@@ -573,12 +621,14 @@ export class Game {
       items: p.items, monkeyIdols: p.monkeyIdols, mastery: p.mastery, clankArea: this.clankArea?.[p.id] ?? 0, inBag: this.bag?.[p.id] ?? 0,
       deckCount: p.deck.length, handCount: p.hand.length, discard: p.discard.map(cardView), playArea: p.playArea.map(cardView), trashedCount: p.trashed.length,
       hand: p.id === pid ? p.hand.map(cardView) : undefined,
+      score: this.phase === 'playing' ? this.score(p, true).total : undefined,
       allCards: this.phase === 'ended' ? [...p.deck, ...p.hand, ...p.discard, ...p.playArea].map(cardView) : undefined,
     }));
-    const base = { code: this.code, phase: this.phase, version: this.version, me: pid, players, logs: this.logs.slice(-80) };
+    const base = { code: this.code, phase: this.phase, version: this.version, me: pid, players, logs: this.logs.slice(-80), options: this.options };
     if (this.phase === 'lobby') return base;
     return {
       ...base,
+      board: this.board.toJSON(),
       dungeonRow: this.dungeonRow.map((c) => (c ? cardView(c) : null)),
       dungeonDeckCount: this.dungeonDeck.length,
       dungeonDiscardTop: this.dungeonDiscard.length ? cardView(this.dungeonDiscard[this.dungeonDiscard.length - 1]) : null,

@@ -1,6 +1,9 @@
 // Companions and equipment (blue banners): go into your deck when acquired.
-const companion = (o) => ({ kind: 'companion', tags: ['companion'], ...o });
-const equipment = (o) => ({ kind: 'companion', tags: ['equipment'], ...o });
+// Blue-banner cards. Subtype tags are shown on the card and matter for rules
+// (e.g. the Rebels check for "another companion in your play area").
+const companion = (o) => ({ kind: 'companion', tags: ['companion'], ...o });   // a person or creature
+const equipment = (o) => ({ kind: 'companion', tags: ['equipment'], ...o });   // an item
+const action = (o) => ({ kind: 'companion', tags: ['action'], ...o });         // a deed; no subtype on the card
 
 const rebelDraw = { when: { otherCompanion: true }, effects: [{ draw: 1 }] };
 
@@ -37,15 +40,15 @@ export default [
   companion({ id: 'tattle', name: 'Tattle', qty: 2, cost: 3, points: 1, text: '+2 Skill. Each other player adds 1 Clank!.', play: [{ skill: 2 }, { othersClank: 1 }] }),
   companion({ id: 'treasure_hunter', name: 'Treasure Hunter', qty: 2, cost: 5, points: 1, text: '+2 Skill. +2 Swords. Replace a card in the Dungeon Row.',
     play: [{ skill: 2, swords: 2 }, { replaceRow: true }] }),
-  companion({ id: 'underworld_dealing', name: 'Underworld Dealing', qty: 2, cost: 1, points: 1, text: 'Choose one: +1 Gold, or pay 7 Gold to gain two Secret Tomes.',
+  action({ id: 'underworld_dealing', name: 'Underworld Dealing', qty: 2, cost: 1, points: 1, text: 'Choose one: +1 Gold, or pay 7 Gold to gain two Secret Tomes.',
     play: [{ choose: [{ label: '+1 Gold', effects: [{ gold: 1 }] }, { label: 'Pay 7 Gold: gain 2 Secret Tomes', effects: [{ buyTomes: { gold: 7, count: 2 } }], requires: { gold: 7 } }] }] }),
-  companion({ id: 'dead_run', name: 'Dead Run', qty: 2, cost: 3, points: 0, text: '+2 Boots. +2 Clank!. You do not have to stop in Crystal Caves this turn.',
+  action({ id: 'dead_run', name: 'Dead Run', qty: 2, cost: 3, points: 0, text: '+2 Boots. +2 Clank!. You do not have to stop in Crystal Caves this turn.',
     play: [{ boots: 2, clank: 2 }, { flag: 'ignoreCrystalCaves' }] }),
-  companion({ id: 'sneak', name: 'Sneak', qty: 2, cost: 2, points: 0, text: '+1 Skill. +1 Boot. -2 Clank!', play: [{ skill: 1, boots: 1, clank: -2 }] }),
-  companion({ id: 'move_silently', name: 'Move Silently', qty: 2, cost: 3, points: 0, text: '+2 Boots. -2 Clank!', play: [{ boots: 2, clank: -2 }] }),
-  companion({ id: 'search', name: 'Search', qty: 2, cost: 4, points: 1, text: '+2 Skill. +1 Boot. +1 Gold', play: [{ skill: 2, boots: 1, gold: 1 }] }),
-  companion({ id: 'swagger', name: 'Swagger', qty: 2, cost: 2, points: 0, text: 'For each Clank! you make this turn (including before playing this), +1 Skill.', play: [{ skillPerClank: true }] }),
-  companion({ id: 'sleight_of_hand', name: 'Sleight of Hand', qty: 2, cost: 2, points: 0, text: 'Discard a card to draw two cards.', play: [{ discardThen: [{ draw: 2 }] }] }),
+  action({ id: 'sneak', name: 'Sneak', qty: 2, cost: 2, points: 0, text: '+1 Skill. +1 Boot. -2 Clank!', play: [{ skill: 1, boots: 1, clank: -2 }] }),
+  action({ id: 'move_silently', name: 'Move Silently', qty: 2, cost: 3, points: 0, text: '+2 Boots. -2 Clank!', play: [{ boots: 2, clank: -2 }] }),
+  action({ id: 'search', name: 'Search', qty: 2, cost: 4, points: 1, text: '+2 Skill. +1 Boot. +1 Gold', play: [{ skill: 2, boots: 1, gold: 1 }] }),
+  action({ id: 'swagger', name: 'Swagger', qty: 2, cost: 2, points: 0, text: 'For each Clank! you make this turn (including before playing this), +1 Skill.', play: [{ skillPerClank: true }] }),
+  action({ id: 'sleight_of_hand', name: 'Sleight of Hand', qty: 2, cost: 2, points: 0, text: 'Discard a card to draw two cards.', play: [{ discardThen: [{ draw: 2 }] }] }),
   companion({ id: 'kobold_merchant', name: 'Kobold Merchant', qty: 2, cost: 3, points: 1, text: '+2 Gold. If you have an Artifact, +2 Skill.',
     play: [{ gold: 2 }, { when: { has: 'artifact' }, effects: [{ skill: 2 }] }] }),
   companion({ id: 'gem_collector', name: 'Gem Collector', qty: 1, cost: 4, points: 2, text: '+2 Skill. -2 Clank!. Gems cost 2 less this turn.', play: [{ skill: 2, clank: -2 }, { gemDiscount: 2 }] }),

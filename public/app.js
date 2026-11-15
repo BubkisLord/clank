@@ -100,9 +100,9 @@ setInterval(() => { if (!state) refreshOpenGames(); }, 4000);
 // ---------- helpers ----------
 const cdef = (c) => STATIC.cards[typeof c === 'string' ? c : c.id];
 const sdef = (id) => STATIC.secrets[id];
-const room = (id) => STATIC.board.rooms.find((r) => r.id === id);
+const room = (id) => (state?.board?.rooms || []).find((r) => r.id === id) || { id, name: id };
 const myPlayer = () => state.players.find((p) => p.id === me);
-const isMyTurn = () => state.currentPlayer === me && state.turn && myPlayer().status === 'in';
+const isMyTurn = () => state.currentPlayer === me && !!state.turn;
 function hearts(dmg) { return '♥'.repeat(10 - dmg) + '<span style="opacity:.3">♥</span>'.repeat(dmg); }
 
 function cardHTML(def, { cost, count, buttons = '', playable = false, small = false } = {}) {
@@ -111,12 +111,14 @@ function cardHTML(def, { cost, count, buttons = '', playable = false, small = fa
   const costLabel = def.kind === 'monster' ? `⚔ ${def.swords}` : (c > 0 || def.reserve ? `${c}` : '');
   const icons = (def.dragon ? '🐉' : '') + (def.danger ? '☠' : '');
   const art = artFor(def);
+  const subtype = def.kind === 'monster' ? 'Monster' : def.kind === 'device' ? 'Device' : def.tags.includes('gem') ? 'Gem' : def.tags.includes('companion') ? 'Companion' : def.tags.includes('equipment') ? 'Item' : '';
   return `<div class="card ${kind} ${art} ${playable ? 'playable' : ''}" title="${def.text}">
     <div class="art" style="background-image:url(assets/cards/card-${art}.jpg)"></div>
     <div class="banner"><span>${def.name}</span><span>${count != null ? `<span class="count">×${count}</span>` : ''}${icons ? `<span class="icons" title="${def.dragon ? 'Dragon attack when revealed. ' : ''}${def.danger ? 'Danger: +1 cube per attack' : ''}">${icons}</span>` : ''}</span></div>
+    ${subtype ? `<div class="subtype">${subtype}</div>` : ''}
     <div class="body">${def.text}</div>
-    <div class="foot"><span class="pts">${def.points ? def.points + ' pts' : ''}</span>${costLabel ? `<span class="cost">${costLabel}</span>` : ''}</div>
     ${buttons ? `<div class="act">${buttons}</div>` : ''}
+    <div class="foot"><span class="pts">${def.points ? def.points + ' pts' : ''}</span>${costLabel ? `<span class="cost">${costLabel}</span>` : ''}</div>
   </div>`;
 }
 
@@ -150,6 +152,10 @@ function render() {
     $('waitPlayers').innerHTML = state.players.map((p, i) => `<li style="border-color:${COLOR[p.color]}"><span>${p.name}${i === 0 ? ' <em>host</em>' : ''}${p.id === me ? ' <em>you</em>' : ''}</span>${host && i > 0 ? `<button class="kick" data-kick="${p.id}" title="Remove ${p.name} from the game">Kick</button>` : ''}</li>`).join('');
     $('waitPlayers').querySelectorAll('[data-kick]').forEach((b) => { b.onclick = () => { if (confirm(`Remove ${b.title.replace('Remove ', '').replace(' from the game', '')} from the game?`)) send({ type: 'kick', playerId: b.dataset.kick }); }; });
     $('startBtn').disabled = !host;
+    const o = state.options || {};
+    $('options').innerHTML = `<div class="opt-row"><span>Map</span><div class="seg">${['random', 'classic'].map((m) => `<button data-opt="map" data-val="${m}" class="${o.map === m ? 'on' : ''}" ${host ? '' : 'disabled'}>${m === 'random' ? 'Random dungeon' : 'Classic map'}</button>`).join('')}</div></div>
+      <div class="opt-row"><span>Turns</span><div class="seg"><button data-opt="autoEnd" data-val="1" class="${o.autoEnd ? 'on' : ''}" ${host ? '' : 'disabled'}>Auto-end when idle</button><button data-opt="autoEnd" data-val="0" class="${o.autoEnd ? '' : 'on'}" ${host ? '' : 'disabled'}>Manual</button></div></div>`;
+    $('options').querySelectorAll('[data-opt]').forEach((b) => { b.onclick = () => send({ type: 'option', key: b.dataset.opt, value: b.dataset.opt === 'autoEnd' ? b.dataset.val === '1' : b.dataset.val }); });
     return;
   }
   $('waiting').classList.add('hidden'); $('game').classList.remove('hidden');
@@ -167,7 +173,8 @@ function renderPlayers() {
     return `<div class="pl ${p.id === state.currentPlayer ? 'current' : ''} ${p.status !== 'in' ? 'out' : ''}" title="${title}">
       <div class="av" style="background:${COLOR[p.color]}">${p.name[0].toUpperCase()}</div>
       <div style="min-width:0;flex:1">
-        <div class="nm"><span>${p.name}${p.id === me ? ' ✦' : ''}${p.connected ? '' : ' ⚠'}</span><span class="g">${p.gold}g ${loot}</span></div>
+        <div class="nm"><span>${p.name}${p.id === me ? ' ✦' : ''}${p.connected ? '' : ' ⚠'}</span><span class="g" title="Points if they made it out now">${p.score ?? 0} pts · ${p.gold}g</span></div>
+        <div class="loot">${loot}</div>
         <div class="hp" title="Health ${10 - p.damage}/10">${hp}</div>
         <div class="st">${st}${p.onCountdown ? ' · countdown' : ''}</div>
         <div class="cubes" title="${p.clankArea} Clank! in the area">${cubes}</div>
@@ -177,14 +184,14 @@ function renderPlayers() {
 }
 
 function renderDragon() {
-  const track = STATIC.board.rageTrack.map((v, i) => `<b class="${i === state.rage ? 'on' : i < state.rage ? 'past' : ''}">${v}</b>`).join('');
+  const track = STATIC.rules.rageTrack.map((v, i) => `<b class="${i === state.rage ? 'on' : i < state.rage ? 'past' : ''}">${v}</b>`).join('');
   const cd = state.countdown ? `<div class="dm">⏳ ${state.players.find((p) => p.id === state.countdown.pid).name} on countdown space <b>${state.countdown.pos + 1}/5</b></div>` : '';
   $('dragon').innerHTML = `<div class="rt"><img src="assets/dragon.svg" alt="">Rage <span class="rage">${track}</span>${state.danger ? `<span title="Danger cards in the row">+${state.danger}☠</span>` : ''}</div>
     <div class="dm">Next attack draws <b>${state.rageValue + state.danger}</b> · bag <b>${state.bag.total}</b> (${state.bag.black} black) · deck <b>${state.dungeonDeckCount}</b></div>${cd}`;
 }
 
 function renderBoard() {
-  const b = STATIC.board;
+  const b = state.board;
   const mp = myPlayer();
   const legal = state.legal;
   const moves = new Map((legal?.moves || []).map((m) => [m.to, m]));
@@ -324,7 +331,8 @@ function renderMe() {
   const mine = isMyTurn();
   const cur = state.players.find((x) => x.id === state.currentPlayer);
   let status;
-  if (p.status !== 'in') status = p.status === 'escaped' ? `You escaped${p.mastery ? ' with a Mastery token' : ''}! Waiting for the others…` : p.koRescued ? 'You were knocked out but rescued — your loot counts.' : 'You were knocked out in the dungeon. Better luck next heist.';
+  if (p.status === 'escaped' && mine) status = `You escaped${p.mastery ? ' with a Mastery token' : ''}! Spend what you have left, then end your turn.`;
+  else if (p.status !== 'in') status = p.status === 'escaped' ? `You escaped${p.mastery ? ' with a Mastery token' : ''}! Waiting for the others…` : p.koRescued ? 'You were knocked out but rescued — your loot counts.' : 'You were knocked out in the dungeon. Better luck next heist.';
   else if (mine) status = state.pending ? 'Make your choice…' : p.hand.length ? 'Your turn — play your cards' : 'Spend your skill, swords and boots';
   else status = `${cur?.name ?? '…'} is sneaking about${state.pending ? ' (deciding…)' : ''}`;
   $('status').textContent = status;
@@ -341,14 +349,20 @@ function renderMe() {
     const L = state.legal;
     if (p.hand.length) a += `<button id="playAll" class="primary">Play all cards</button>`;
     if (L?.canTakeArtifact) a += `<button id="takeArt" class="primary">Take Artifact (${state.rooms[p.room].artifact})</button>`;
-    if (t.teleports > 0) a += `<button id="tpMode" ${teleportMode ? 'class="primary"' : ''}>${teleportMode ? 'Cancel teleport' : `Teleport (${t.teleports})`}</button>`;
-    a += `<button id="endTurn" ${L?.canEndTurn ? '' : 'disabled title="Play all cards first"'}>End turn</button>`;
+    if (t.teleports > 0 && p.status === 'in') a += `<button id="tpMode" ${teleportMode ? 'class="primary"' : ''}>${teleportMode ? 'Cancel teleport' : `Teleport (${t.teleports})`}</button>`;
+    for (const d of L?.deferred || []) a += `<button class="resume" data-resume="${d.i}" title="Return to this postponed choice">↩ ${d.title}</button>`;
+    a += `<button id="endTurn" class="${!p.hand.length && !L?.hasAction ? 'primary' : ''}">End turn${p.hand.length ? ` (${p.hand.length} unplayed)` : ''}</button>`;
   }
   $('actions').innerHTML = a;
+  $('actions').querySelectorAll('[data-resume]').forEach((b) => { b.onclick = () => act({ type: 'resume', index: Number(b.dataset.resume) }); });
   if ($('playAll')) $('playAll').onclick = () => act({ type: 'playAll' });
   if ($('takeArt')) $('takeArt').onclick = () => act({ type: 'takeArtifact' });
   if ($('tpMode')) $('tpMode').onclick = () => { teleportMode = !teleportMode; render(); };
-  if ($('endTurn')) $('endTurn').onclick = () => act({ type: 'endTurn' });
+  if ($('endTurn')) $('endTurn').onclick = () => {
+    const unplayed = p.hand.length, postponed = (state.legal?.deferred || []).length;
+    if ((unplayed || postponed) && !confirm(`End your turn now?${unplayed ? ` ${unplayed} card${unplayed > 1 ? 's' : ''} in hand will be discarded unplayed.` : ''}${postponed ? ' Postponed choices will lapse.' : ''}`)) return;
+    act({ type: 'endTurn' });
+  };
 
   $('hand').innerHTML = (p.hand || []).map((c) => `<div data-play="${c.uid}">${cardHTML(cdef(c), { playable: mine && !state.pending })}</div>`).join('') || `<span class="muted">${mine ? 'All cards played — spend your resources, then end your turn.' : 'Waiting for your next hand.'}</span>`;
   if (mine) $('hand').querySelectorAll('[data-play]').forEach((d) => { d.onclick = () => { if (!state.pending) act({ type: 'play', uid: d.dataset.play }); }; });
@@ -371,9 +385,10 @@ function renderPrompt() {
   const pr = state.pending;
   if (!pr || pr.pid !== me || !pr.options) { $('prompt').classList.add('hidden'); return; }
   $('prompt').classList.remove('hidden');
-  $('promptTitle').textContent = pr.title;
+  $('promptTitle').innerHTML = `<span>${pr.title}</span>${isMyTurn() ? '<button id="deferBtn" class="defer" title="Close this and come back to it later this turn">✕ Decide later</button>' : ''}`;
   $('promptOptions').innerHTML = pr.options.map((o, i) => o.card ? `<div data-opt="${i}">${cardHTML(o.card, { playable: true })}</div>` : `<button class="opt" data-opt="${i}">${o.label}</button>`).join('');
   $('promptOptions').querySelectorAll('[data-opt]').forEach((el) => { el.onclick = () => act({ type: 'resolve', value: pr.options[Number(el.dataset.opt)].value }); });
+  if ($('deferBtn')) $('deferBtn').onclick = () => act({ type: 'defer' });
 }
 
 function renderResults() {

@@ -48,6 +48,18 @@ files (or a new file imported in `cards/index.js`); the effect vocabulary covers
 choices, discard/trash, teleport, conditionals (`when`), dragon attacks, row replacement, etc.
 Anything exotic can use `{ fn: (game, player, card) => ... }`.
 
+## Lobby options
+
+- **Map**: *Random dungeon* (default) generates a new map each game from rules in
+  `server/game/board.js` (`generateBoard`): three surface rows and four Depths rows, guaranteed
+  connectivity and escape routes, hazards rolled per tunnel, the 30-point artifact behind locks,
+  features dealt from surface and Depths pools. *Classic map* uses the fixed hand-made layout.
+- **Turns**: *Auto-end when idle* ends a turn automatically once all cards are played and no
+  action remains (nothing affordable, nowhere to go, nothing useful to use). *Manual* never does.
+
+Players may end a turn early (unplayed cards are discarded) and may postpone a card's choice
+dialog ("Decide later") to play other cards first; postponed choices lapse at end of turn.
+
 ## Rules implemented
 
 Full turn structure, dungeon row refill with dragon attacks (once per refill), Danger,

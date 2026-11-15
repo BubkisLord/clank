@@ -1,3 +1,4 @@
+// Board definitions: the hand-made 'classic' map below, plus a rule-based random generator.
 // Board definition. Coordinates are in a 1000x1000 space used by the client to draw the map.
 // Room features: start, crystal, market, fountain, monkeyShrine, artifact (value),
 //                majorSecret (true), minorSecrets (count), depths (bool)
@@ -77,27 +78,206 @@ export const MASTERY_POINTS = 20;
 export const MARKET_PRICE = 7;
 export const ARTIFACTS = [5, 7, 10, 15, 20, 25, 30];
 
-export const roomById = Object.fromEntries(ROOMS.map((r) => [r.id, r]));
 
-export function tunnelsFrom(roomId) {
-  const out = [];
-  for (const [a, b, opts = {}] of TUNNELS) {
-    if (a === roomId) out.push({ to: b, ...opts });
-    else if (b === roomId && !opts.oneWay) out.push({ to: a, ...opts });
+export class Board {
+  constructor({ rooms, tunnels, name = 'classic' }) {
+    this.name = name;
+    this.rooms = rooms;
+    this.tunnels = tunnels; // [from, to, opts]
+    this.byId = Object.fromEntries(rooms.map((r) => [r.id, r]));
   }
-  return out;
+  room(id) { return this.byId[id]; }
+  tunnelsFrom(roomId) {
+    const out = [];
+    for (const [a, b, opts = {}] of this.tunnels) {
+      if (a === roomId) out.push({ to: b, ...opts });
+      else if (b === roomId && !opts.oneWay) out.push({ to: a, ...opts });
+    }
+    return out;
+  }
+  connectedRooms(roomId) {
+    const out = new Set();
+    for (const [a, b] of this.tunnels) { if (a === roomId) out.add(b); if (b === roomId) out.add(a); }
+    return [...out];
+  }
+  toJSON() { return { name: this.name, rooms: this.rooms, tunnels: this.tunnels.map(([a, b, o = {}]) => ({ from: a, to: b, ...o })) }; }
 }
 
-export function connectedRooms(roomId) {
-  // Any room joined by a tunnel in either direction (teleport ignores one-way/locks).
-  const out = new Set();
-  for (const [a, b] of TUNNELS) {
-    if (a === roomId) out.add(b);
-    if (b === roomId) out.add(a);
-  }
-  return [...out];
+export function classicBoard() { return new Board({ rooms: ROOMS, tunnels: TUNNELS, name: 'classic' }); }
+
+// ---------------------------------------------------------------------------
+// Random map generator. Rules:
+//  - 7 rows of rooms below the start: 3 surface rows, 4 Depths rows.
+//  - Every room in a row links to its nearest room in the row above (so everything is reachable),
+//    plus optional second links and horizontal links to neighbours.
+//  - Tunnel hazards are rolled per tunnel (footprints / monsters / one-way); one-way tunnels are
+//    only kept if every room can still get back to the entrance.
+//  - The 30-point artifact sits in a bottom-row room whose every tunnel is locked.
+//  - Features are dealt from a surface pool and a Depths pool with artifact depth constraints.
+// ---------------------------------------------------------------------------
+const NAMES = {
+  plain: ['Guard Post', 'Barracks', 'Entrance Hall', 'Store Room', 'Lookout', 'Lower Cells', 'Ossuary', 'Rat Warren', 'Collapsed Stair', 'Old Cistern', 'Hall of Statues', 'Spider Gallery', 'Broken Bridge', 'Echoing Vault', 'Dusty Archive', 'Torture Chamber', 'Wine Cellar', 'Dripping Passage', 'Kobold Den', 'Forgotten Shrine'],
+  crystal: ['Glittering Cave', 'Crystal Grotto', 'Crystal Maze', 'Crystal Abyss', 'Shard Hollow', 'Prism Cavern'],
+  market: ['Trading Post', 'Deep Market', 'Black Market', 'Smugglers’ Den', 'Goblin Bazaar'],
+  fountain: ['Fountain Court', 'Healing Spring', 'Sacred Pool', 'Moss Well'],
+  monkey: ['Monkey Shrine'],
+  major: ['Chapel', 'Shrine of Secrets', 'Sunken Library', 'Ancient Altar', 'Sealed Reliquary', 'Oracle’s Cell'],
+  minor: ['Guard Post', 'Store Room', 'Lookout', 'Lower Cells', 'Ossuary', 'Thieves’ Cache', 'Abandoned Camp', 'Crypt Niche', 'Hidden Alcove'],
+  artifact: { 5: 'Armory', 7: 'Treasury Vault', 10: 'Forgotten Vault', 15: 'Dragon Hoard', 20: 'Golem Workshop', 25: 'Troll Den', 30: "Nicki’s Nest" },
+};
+
+export function makeRng(seed) {
+  // mulberry32
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
-export function publicBoard() {
-  return { rooms: ROOMS, tunnels: TUNNELS.map(([a, b, o = {}]) => ({ from: a, to: b, ...o })), rageTrack: RAGE_TRACK };
+export function generateBoard(seed = Math.floor(Math.random() * 2 ** 31)) {
+  const rnd = makeRng(seed);
+  const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
+  const take = (arr) => arr.splice(Math.floor(rnd() * arr.length), 1)[0];
+  const shuf = (arr) => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
+
+  // --- rooms on a jittered grid ---
+  const rowSpec = [
+    { y: 150, n: 3, depths: false }, { y: 268, n: 4, depths: false }, { y: 372, n: 4, depths: false },
+    { y: 492, n: 4, depths: true }, { y: 612, n: 4, depths: true }, { y: 740, n: 4, depths: true }, { y: 880, n: 3 + (rnd() < 0.5 ? 1 : 0), depths: true },
+  ];
+  const rooms = [{ id: 'start', name: 'Outside the Dungeon', x: 500, y: 45, start: true, row: 0 }];
+  const rows = [[rooms[0]]];
+  rowSpec.forEach((spec, ri) => {
+    const row = [];
+    for (let i = 0; i < spec.n; i++) {
+      const x = Math.round(Math.min(905, Math.max(95, (1000 * (i + 0.5)) / spec.n + (rnd() - 0.5) * 70)));
+      const y = Math.round(spec.y + (rnd() - 0.5) * 36);
+      const r = { id: `r${ri + 1}_${i}`, name: '', x, y, depths: spec.depths, row: ri + 1 };
+      row.push(r); rooms.push(r);
+    }
+    rows.push(row);
+  });
+
+  // --- tunnels ---
+  const edges = new Map(); // key -> [a, b, opts]
+  const key = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+  const link = (a, b, opts = {}) => { const k = key(a.id, b.id); if (!edges.has(k)) edges.set(k, [a.id, b.id, opts]); return edges.get(k); };
+  const dist = (a, b) => Math.hypot(a.x - b.x, (a.y - b.y) * 0.6);
+  // start -> middle of row 1
+  const r1 = [...rows[1]].sort((a, b) => Math.abs(a.x - 500) - Math.abs(b.x - 500));
+  link(rooms[0], r1[0]);
+  if (rnd() < 0.5) link(rooms[0], r1[1]);
+  for (let ri = 1; ri < rows.length; ri++) {
+    const row = rows[ri];
+    // horizontal links
+    for (let i = 0; i + 1 < row.length; i++) if (rnd() < 0.72) link(row[i], row[i + 1]);
+    if (ri === 1) for (let i = 0; i + 1 < row.length; i++) link(row[i], row[i + 1]);
+    // vertical links to previous row
+    if (ri >= 2) {
+      const above = rows[ri - 1];
+      for (const r of row) {
+        const sorted = [...above].sort((a, b) => dist(a, r) - dist(b, r));
+        link(sorted[0], r);
+        if (sorted[1] && rnd() < 0.42 && Math.abs(sorted[1].x - r.x) < 360) link(sorted[1], r);
+      }
+    }
+  }
+  const tunnels = [...edges.values()];
+  const byId = Object.fromEntries(rooms.map((r) => [r.id, r]));
+
+  // --- helpers over the current tunnel list ---
+  const reachable = (from, { respectOneWay = true, skipLocked = false, reverse = false } = {}) => {
+    const seen = new Set([from]); const stack = [from];
+    while (stack.length) {
+      const cur = stack.pop();
+      for (const [a, b, o = {}] of tunnels) {
+        if (skipLocked && o.locked) continue;
+        let nexts = [];
+        const fwd = !respectOneWay || !o.oneWay;
+        if (!reverse) { if (a === cur) nexts.push(b); if (b === cur && fwd) nexts.push(a); }
+        else { if (b === cur) nexts.push(a); if (a === cur && fwd) nexts.push(b); }
+        for (const n of nexts) if (!seen.has(n)) { seen.add(n); stack.push(n); }
+      }
+    }
+    return seen;
+  };
+  // connectivity guard
+  let reach = reachable('start', { respectOneWay: false });
+  for (const r of rooms) if (!reach.has(r.id)) {
+    const cands = rooms.filter((o) => reach.has(o.id) && o.row === r.row - 1).sort((a, b) => dist(a, r) - dist(b, r));
+    tunnels.push([cands[0].id, r.id, {}]);
+    reach = reachable('start', { respectOneWay: false });
+  }
+
+  // --- features ---
+  const surface = rooms.filter((r) => r.row >= 1 && r.row <= 3);
+  const depths = rooms.filter((r) => r.row >= 4);
+  const assign = (room, f) => Object.assign(room, f);
+  const freeIn = (list) => list.filter((r) => !r.feature);
+  const placeArtifact = (value, candidates) => { const r = take(shuf(freeIn(candidates))); assign(r, { feature: 'artifact', artifact: value, name: NAMES.artifact[value] }); return r; };
+  // the 30 goes in a bottom-row room with the fewest tunnels
+  const bottom = rows[rows.length - 1];
+  const degree = (r) => tunnels.filter(([a, b]) => a === r.id || b === r.id).length;
+  const nest = [...bottom].sort((a, b) => degree(a) - degree(b) || rnd() - 0.5)[0];
+  assign(nest, { feature: 'artifact', artifact: 30, name: NAMES.artifact[30] });
+  placeArtifact(5, rows[2]);
+  placeArtifact(7, rows[3]);
+  placeArtifact(10, [...rows[4]]);
+  placeArtifact(15, [...rows[4], ...rows[5]]);
+  placeArtifact(20, [...rows[5], ...rows[6]]);
+  placeArtifact(25, [...rows[6], ...rows[7]]);
+  const dealt = (pool, list) => { const free = shuf(freeIn(list)); for (const f of pool) { const r = free.pop(); if (!r) break; assign(r, f); } };
+  const featureDefs = {
+    market: () => ({ feature: 'market', market: true }), crystal: () => ({ feature: 'crystal', crystal: true }), fountain: () => ({ feature: 'fountain', fountain: true }),
+    monkey: () => ({ feature: 'monkey', monkeyShrine: true }), major: () => ({ feature: 'major', majorSecret: true }), minor: () => ({ feature: 'minor', minorSecrets: 2 }), plain: () => ({ feature: 'plain' }),
+  };
+  const surfacePool = ['market', 'crystal', 'fountain', 'major', 'minor', 'minor', 'minor', 'plain', 'plain'].map((k) => featureDefs[k]());
+  const depthsPool = ['market', 'market', 'crystal', 'crystal', 'crystal', 'fountain', 'monkey', 'major', 'major', 'major', 'minor', 'minor', 'minor', 'plain'].map((k) => featureDefs[k]());
+  // never a crystal cave directly off the entrance row
+  dealt(surfacePool, surface.filter((r) => r.row !== 1 || true));
+  dealt(depthsPool, depths);
+  for (const r of rooms) if (!r.feature && !r.start) assign(r, featureDefs.plain());
+  // names
+  const pools = Object.fromEntries(Object.entries(NAMES).filter(([k]) => k !== 'artifact').map(([k, v]) => [k, shuf([...v])]));
+  const used = new Set(rooms.map((r) => r.name).filter(Boolean));
+  for (const r of rooms) {
+    if (r.name) continue;
+    const pool = pools[r.feature] || pools.plain;
+    let n = pool.length ? pool.pop() : null;
+    while (n && used.has(n)) n = pool.length ? pool.pop() : null;
+    if (!n) { n = pools.plain.pop(); while (n && used.has(n)) n = pools.plain.pop(); }
+    r.name = n || `Chamber ${r.id.slice(1)}`;
+    used.add(r.name);
+  }
+
+  // --- hazards ---
+  for (const t of tunnels) {
+    const [a, b] = t; const o = t[2] = t[2] || {};
+    if (a === 'start' || b === 'start') continue;
+    const deep = byId[a].depths || byId[b].depths;
+    const roll = rnd();
+    if (roll < 0.17) o.boots = 2;
+    else if (roll < 0.33) o.monsters = deep && rnd() < 0.22 ? 2 : 1;
+    else if (roll < 0.41) o.oneWay = true;
+  }
+  // locks: every tunnel into the nest, plus one more Depths tunnel
+  for (const t of tunnels) if (t[0] === nest.id || t[1] === nest.id) { t[2] = { locked: true }; }
+  const extra = shuf(tunnels.filter((t) => t[2].locked !== true && byId[t[0]].depths && byId[t[1]].depths && !t[2].oneWay))[0];
+  if (extra) extra[2].locked = true;
+  // orient one-way tunnels: prefer pointing away from the entrance, then validate escape routes
+  for (const t of tunnels) if (t[2].oneWay) { if (byId[t[0]].row > byId[t[1]].row) [t[0], t[1]] = [t[1], t[0]]; }
+  const everyoneCanEscape = () => { const back = reachable('start', { respectOneWay: true, skipLocked: true, reverse: true }); return rooms.every((r) => r.id === nest.id || back.has(r.id)); };
+  const everythingReachable = () => { const fwd = reachable('start', { respectOneWay: true, skipLocked: true }); return rooms.every((r) => r.id === nest.id || fwd.has(r.id)); };
+  for (const t of tunnels) {
+    if (t[2].oneWay && !(everyoneCanEscape() && everythingReachable())) { delete t[2].oneWay; }
+  }
+  if (extra && !(everyoneCanEscape() && everythingReachable())) delete extra[2].locked;
+  // the nest must be reachable at all (with a key)
+  if (!reachable('start', { respectOneWay: true }).has(nest.id)) { for (const t of tunnels) if ((t[0] === nest.id || t[1] === nest.id) && t[2].oneWay) delete t[2].oneWay; }
+
+  const cleanRooms = rooms.map(({ feature, row, ...r }) => r);
+  const cleanTunnels = tunnels.map(([a, b, o]) => [a, b, Object.keys(o).length ? o : undefined]).map(([a, b, o]) => (o ? [a, b, o] : [a, b]));
+  return new Board({ rooms: cleanRooms, tunnels: cleanTunnels, name: `random-${seed}` });
+}
+
+export function publicRules() {
+  return { rageTrack: RAGE_TRACK };
 }

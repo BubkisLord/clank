@@ -95,6 +95,8 @@ h1,h2,h3,h4 { font-family:var(--display); font-weight:700; margin:0; letter-spac
 #boardWrap { grid-column:1; grid-row:1; overflow:hidden; display:flex; align-items:center; justify-content:center; background:var(--ink); }
 #board { width:100%; height:100%; position:relative; }
 #side { grid-column:2; grid-row:1 / span 2; overflow-y:auto; padding:10px 14px 14px; background:var(--ink-2); border-left:2px solid #5a3f27; display:flex; flex-direction:column; gap:6px; }
+#side > * { flex:none; }
+#side #log { flex:1 1 auto; min-height:220px; }
 #me { grid-column:1; grid-row:2; background:linear-gradient(#1a1118, #130d12); border-top:2px solid #5a3f27; padding:8px 14px 10px; display:flex; flex-direction:column; gap:8px; max-height:280px; }
 #tabbar { display:none; }
 .ph { display:flex; align-items:baseline; gap:8px; margin-top:6px; }
@@ -159,8 +161,21 @@ g[data-mv]:hover .room, g[data-tp]:hover .room { stroke:#fff; }
 .card.monster .cost { background:var(--red); }
 .card.playable { cursor:pointer; border-color:var(--gold); box-shadow:inset 0 0 0 2px #cdb98c, 0 0 0 2px var(--gold), 0 6px 16px rgba(0,0,0,.5); }
 .card.playable:hover { transform:translateY(-6px) rotate(-1deg); box-shadow:inset 0 0 0 2px #cdb98c, 0 0 0 2px var(--gold), 0 14px 24px rgba(0,0,0,.6); }
-.card .act { position:absolute; left:0; right:0; bottom:0; display:flex; }
-.card .act button { flex:1; border-radius:0; padding:5px; font-size:11px; background:linear-gradient(#f0bd55, #c78a22); color:#2a1708; border:none; border-top:1px solid #2a1c12; }
+.card .act { display:flex; padding:0 6px 4px; }
+.card .act button { flex:1; padding:4px; font-size:11px; background:linear-gradient(#f0bd55, #c78a22); color:#2a1708; border:1px solid #8c6a3c; border-radius:6px; }
+.card .subtype { font-family:var(--caps); font-size:8.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--parch-muted); padding:4px 8px 0; }
+.cards.small .card .subtype { display:none; }
+.pl .loot { font-size:11px; line-height:1; margin-top:1px; }
+.modal-box h3 { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+button.defer { font-size:11px; padding:5px 10px; background:transparent; border-color:#8c6a3c; color:var(--parch-ink); box-shadow:none; }
+button.resume { border-color:var(--purple); }
+#options { display:flex; flex-direction:column; gap:8px; }
+.opt-row { display:flex; align-items:center; gap:12px; font-family:var(--caps); font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--parch-muted); }
+.opt-row span { width:52px; }
+.seg { display:flex; }
+.seg button { border-radius:0; font-size:11px; padding:6px 12px; }
+.seg button:first-child { border-radius:6px 0 0 6px; } .seg button:last-child { border-radius:0 6px 6px 0; }
+.seg button.on { background:linear-gradient(#f0bd55, #c78a22); color:#2a1708; }
 .card.empty { background:rgba(255,255,255,.03); border:2px dashed #4d3521; box-shadow:none; }
 #dungeonRow .card { --w:calc((100% - 16px) / 3); }
 #reserve .card { --w:calc((100% - 24px) / 4); font-size:10.5px; }
@@ -177,7 +192,7 @@ g[data-mv]:hover .room, g[data-tp]:hover .room { stroke:#fff; }
 .mk button { margin-top:4px; width:100%; }
 
 /* ---------- log ---------- */
-#log { background:rgba(0,0,0,.35); border:1px solid #5a3f27; border-radius:6px; padding:8px 10px; max-height:240px; overflow-y:auto; font-size:12.5px; color:#d6c7a6; font-style:italic; }
+#log { background:rgba(0,0,0,.35); border:1px solid #5a3f27; border-radius:6px; padding:8px 10px; overflow-y:auto; font-size:12.5px; color:#d6c7a6; font-style:italic; }
 #log div.attack { color:var(--ember); font-weight:700; font-style:normal; }
 #log div.turn { color:var(--gold); font-style:normal; font-family:var(--display); font-size:15px; margin-top:6px; }
 

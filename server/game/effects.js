@@ -1,7 +1,6 @@
 // Effect interpreter. Every card/secret effect is a plain object; this file knows how to apply them.
 // Effects that need a decision set `game.pending` and are continued by Game.resolvePending().
 import { def, makeCard, publicDef } from './cards/index.js';
-import { connectedRooms, roomById } from './board.js';
 
 export function evalCondition(game, p, cond, card) {
   if (!cond) return true;
@@ -111,9 +110,9 @@ export function applyEffect(game, p, e, card) {
 
   if (e.takeAdjacentSecret) {
     const options = [];
-    for (const rid of connectedRooms(p.room)) {
+    for (const rid of game.board.connectedRooms(p.room)) {
       const rs = game.rooms[rid];
-      if (rs && (rs.majorSecret || rs.minorSecrets.length)) options.push({ label: roomById[rid].name, value: rid });
+      if (rs && (rs.majorSecret || rs.minorSecrets.length)) options.push({ label: game.board.room(rid).name, value: rid });
     }
     if (options.length === 0) return game.log('No secrets in adjacent rooms');
     game.prompt(p, { title: 'Take a Secret from an adjacent room', options }, (rid) => game.takeRoomSecret(p, rid));

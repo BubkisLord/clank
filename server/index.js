@@ -105,6 +105,14 @@ wss.on('connection', (ws) => {
           broadcast(entry);
           break;
         }
+        case 'option': {
+          const entry = games.get(ws.gameCode);
+          if (!entry) throw new GameError('Not in a game');
+          if (entry.game.players[0]?.id !== ws.playerId) throw new GameError('Only the host can change options');
+          entry.game.setOption(msg.key, msg.value);
+          broadcast(entry);
+          break;
+        }
         case 'kick': {
           const entry = games.get(ws.gameCode);
           if (!entry) throw new GameError('Not in a game');

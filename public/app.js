@@ -51,6 +51,14 @@ function connect() {
       state = msg.state;
       me = state.me;
       render();
+    } else if (msg.type === 'kicked') {
+      sessionStorage.removeItem('clank:' + msg.code);
+      localStorage.removeItem('clank:' + msg.code);
+      state = null; me = null;
+      $('waiting').classList.add('hidden'); $('game').classList.add('hidden'); $('lobby').classList.remove('hidden');
+      history.replaceState(null, '', location.pathname);
+      $('lobbyError').textContent = 'The host removed you from the heist.';
+      toast('You were removed from the game');
     } else if (msg.type === 'error') {
       toast(msg.message);
       $('lobbyError').textContent = msg.message;
@@ -138,8 +146,10 @@ function render() {
     scheduleInline();
     $('waitCode').textContent = state.code;
     $('shareLink').textContent = `${location.origin}/?g=${state.code}`;
-    $('waitPlayers').innerHTML = state.players.map((p, i) => `<li style="color:${COLOR[p.color]}">● ${p.name}${i === 0 ? ' (host)' : ''}${p.id === me ? ' — you' : ''}</li>`).join('');
-    $('startBtn').disabled = state.players[0].id !== me;
+    const host = state.players[0].id === me;
+    $('waitPlayers').innerHTML = state.players.map((p, i) => `<li style="border-color:${COLOR[p.color]}"><span>${p.name}${i === 0 ? ' <em>host</em>' : ''}${p.id === me ? ' <em>you</em>' : ''}</span>${host && i > 0 ? `<button class="kick" data-kick="${p.id}" title="Remove ${p.name} from the game">Kick</button>` : ''}</li>`).join('');
+    $('waitPlayers').querySelectorAll('[data-kick]').forEach((b) => { b.onclick = () => { if (confirm(`Remove ${b.title.replace('Remove ', '').replace(' from the game', '')} from the game?`)) send({ type: 'kick', playerId: b.dataset.kick }); }; });
+    $('startBtn').disabled = !host;
     return;
   }
   $('waiting').classList.add('hidden'); $('game').classList.remove('hidden');

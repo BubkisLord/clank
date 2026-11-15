@@ -51,6 +51,7 @@ function broadcast(entry) {
 }
 
 function attach(ws, entry, player) {
+  if (ws.gameCode) detach(ws); // a socket holds one seat at a time
   ws.gameCode = entry.game.code;
   ws.playerId = player.id;
   if (!entry.sockets.has(player.id)) entry.sockets.set(player.id, new Set());
@@ -80,7 +81,7 @@ wss.on('connection', (ws) => {
           let code = randomCode();
           while (games.has(code)) code = randomCode();
           const game = new Game(code);
-          const entry = { game, sockets: new Map(), lastActivity: Date.now() };
+          const entry = { game, sockets: new Map(), kicked: new Set(), lastActivity: Date.now() };
           games.set(code, entry);
           const p = game.addPlayer(msg.name);
           attach(ws, entry, p);
@@ -90,6 +91,7 @@ wss.on('connection', (ws) => {
           const code = String(msg.code || '').toUpperCase().trim();
           const entry = games.get(code);
           if (!entry) throw new GameError(`No game with code ${code}`);
+          if (msg.token && entry.kicked.has(msg.token)) throw new GameError('You were removed from this game by the host');
           let p = msg.token ? entry.game.players.find((x) => x.token === msg.token) : null;
           if (!p) p = entry.game.addPlayer(msg.name);
           attach(ws, entry, p);
@@ -100,6 +102,22 @@ wss.on('connection', (ws) => {
           if (!entry) throw new GameError('Not in a game');
           if (entry.game.players[0]?.id !== ws.playerId) throw new GameError('Only the host can start');
           entry.game.start();
+          broadcast(entry);
+          break;
+        }
+        case 'kick': {
+          const entry = games.get(ws.gameCode);
+          if (!entry) throw new GameError('Not in a game');
+          const { game } = entry;
+          if (game.phase !== 'lobby') throw new GameError('Players can only be kicked before the game starts');
+          if (game.players[0]?.id !== ws.playerId) throw new GameError('Only the host can kick');
+          const target = game.playerById(msg.playerId);
+          if (!target) throw new GameError('No such player');
+          if (target.id === ws.playerId) throw new GameError('You cannot kick yourself');
+          entry.kicked.add(target.token);
+          for (const sock of entry.sockets.get(target.id) || []) { send(sock, { type: 'kicked', code: game.code }); sock.gameCode = null; sock.playerId = null; }
+          entry.sockets.delete(target.id);
+          game.removePlayer(target.id, 'was kicked by the host');
           broadcast(entry);
           break;
         }

@@ -37,11 +37,11 @@ export class Game {
     return p;
   }
 
-  removePlayer(pid) {
+  removePlayer(pid, reason = 'left') {
     if (this.phase !== 'lobby') return;
     const i = this.players.findIndex((p) => p.id === pid);
     if (i >= 0) {
-      this.log(`${this.players[i].name} left`);
+      this.log(`${this.players[i].name} ${reason}`);
       this.players.splice(i, 1);
       this.players.forEach((p, j) => { p.color = COLORS[j]; });
     }

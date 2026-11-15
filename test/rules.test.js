@@ -131,11 +131,25 @@ test('random boards are well-formed', () => {
     assert.ok(b.rooms.filter((r) => r.majorSecret).length >= 3);
     const nest = b.rooms.find((r) => r.artifact === 30);
     assert.ok(nest.depths);
-    for (const [a, c, o = {}] of b.tunnels) if (a === nest.id || c === nest.id) assert.ok(o.locked, `nest tunnels locked (seed ${seed})`);
-    // every room can reach the exit without a key, respecting one-way tunnels (except the nest)
+    // the Vault pocket: rooms only reachable through locked tunnels
+    const open = new Set(['start']); const st = ['start'];
+    while (st.length) { const x = st.pop(); for (const [a, c, o = {}] of b.tunnels) { if (o.locked) continue; for (const [from, to] of [[a, c], [c, a]]) if (from === x && !open.has(to) && !(o.oneWay && from === c)) { open.add(to); st.push(to); } } }
+    const pocket = b.rooms.filter((r) => !open.has(r.id));
+    assert.ok(pocket.some((r) => r.id === nest.id) && pocket.length <= 2, `vault pocket is 1-2 rooms (seed ${seed})`);
+    for (const r of pocket) assert.ok(r.artifact >= 25 || r.majorSecret, `locked rooms hold a big reward (seed ${seed}): ${r.name}`);
+    for (const [a, c, o = {}] of b.tunnels) { const ia = pocket.some((r) => r.id === a), ic = pocket.some((r) => r.id === c); if (ia !== ic) assert.ok(o.locked, `pocket boundary locked (seed ${seed})`); }
+    // exactly one locked shortcut from the Depths to the surface
+    const shortcuts = b.tunnels.filter(([, , o = {}]) => o.shortcut);
+    assert.equal(shortcuts.length, 1);
+    { const [a, c, o] = shortcuts[0]; const ra = b.rooms.find((r) => r.id === a), rc = b.rooms.find((r) => r.id === c); assert.ok(o.locked && ra.depths !== rc.depths, `shortcut joins Depths to surface (seed ${seed})`); }
+    // every room outside the pocket can reach the exit without a key, respecting one-way tunnels
     const back = new Set(['start']); const stack = ['start'];
     while (stack.length) { const x = stack.pop(); for (const [a, c, o = {}] of b.tunnels) { if (o.locked) continue; if (c === x && !back.has(a)) { back.add(a); stack.push(a); } if (a === x && !o.oneWay && !back.has(c)) { back.add(c); stack.push(c); } } }
-    for (const r of b.rooms) if (r.id !== nest.id) assert.ok(back.has(r.id), `room ${r.name} can escape (seed ${seed})`);
+    for (const r of b.rooms) if (!pocket.some((q) => q.id === r.id)) assert.ok(back.has(r.id), `room ${r.name} can escape (seed ${seed})`);
+    // with a key the pocket is reachable
+    const withKey = new Set(['start']); const sk = ['start'];
+    while (sk.length) { const x = sk.pop(); for (const [a, c, o = {}] of b.tunnels) { if (a === x && !withKey.has(c)) { withKey.add(c); sk.push(c); } if (c === x && !o.oneWay && !withKey.has(a)) { withKey.add(a); sk.push(a); } } }
+    for (const r of pocket) assert.ok(withKey.has(r.id), `pocket reachable with a key (seed ${seed})`);
     const names = b.rooms.map((r) => r.name);
     assert.equal(new Set(names).size, names.length, `unique names (seed ${seed})`);
   }

@@ -231,7 +231,15 @@ function renderBoard() {
   <text x="22" y="462" class="depths-label">✦ THE DEPTHS ✦</text>`;
   for (const t of b.tunnels) {
     const a = room(t.from), c = room(t.to);
-    const cls = ['tunnel', t.locked ? 'locked' : '', t.boots ? 'footprints' : '', t.monsters ? 'monsters' : ''].join(' ');
+    const cls = ['tunnel', t.locked ? 'locked' : '', t.boots ? 'footprints' : '', t.monsters ? 'monsters' : '', t.shortcut ? 'shortcut' : ''].join(' ');
+    if (t.shortcut) {
+      // a long locked passage: drawn as a curve bowing away from the map centre so it reads as a secret route
+      const mx = (a.x + c.x) / 2, bow = a.x + c.x > 1000 ? 120 : -120;
+      const d = `M${a.x},${a.y} Q${mx + bow},${(a.y + c.y) / 2} ${c.x},${c.y}`;
+      s += `<path d="${d}" class="tunnel-bg"/><path d="${d}" class="${cls}"><title>Locked shortcut — Master Key needed</title></path>`;
+      s += `<rect x="${mx + bow / 2 - 30}" y="${(a.y + c.y) / 2 - 12}" width="60" height="22" rx="6" class="tlabel-bg"/><text x="${mx + bow / 2}" y="${(a.y + c.y) / 2 + 5}" class="tlabel">🔒 ⤴</text>`;
+      continue;
+    }
     s += `<line x1="${a.x}" y1="${a.y}" x2="${c.x}" y2="${c.y}" class="tunnel-bg"/><line x1="${a.x}" y1="${a.y}" x2="${c.x}" y2="${c.y}" class="${cls}" ${t.oneWay ? 'marker-end="url(#arrow)"' : ''}/>`;
     const label = [t.locked ? '🔒' : '', t.boots ? '👣' : '', t.monsters ? '⚔'.repeat(t.monsters) : ''].join('');
     if (label) { const mx = (a.x + c.x) / 2, my = (a.y + c.y) / 2; s += `<rect x="${mx - 17}" y="${my - 12}" width="34" height="22" rx="6" class="tlabel-bg"/><text x="${mx}" y="${my + 5}" class="tlabel">${label}</text>`; }
@@ -283,7 +291,7 @@ function renderHud(moves, tele) {
   }
   if (isMyTurn() && !state.pending) {
     const exhausted = t.enteredCrystalCave && !t.flags.ignoreCrystalCaves;
-    const rows = [...moves.values()].map((m) => `<div class="r ${m.ok ? '' : 'dim'}"><b>${room(m.to).name}</b><span>${m.ok ? `${m.cost}👢${m.damage ? ` ${m.damage}💔` : ''}${m.monsters && !m.damage ? ' ⚔' : ''}` : exhausted ? '' : m.reason}</span></div>`).join('');
+    const rows = [...moves.values()].map((m) => `<div class="r ${m.ok ? '' : 'dim'}"><b>${m.shortcut ? '⤴ ' : ''}${room(m.to).name}</b><span>${m.ok ? `${m.cost}👢${m.damage ? ` ${m.damage}💔` : ''}${m.monsters && !m.damage ? ' ⚔' : ''}${m.shortcut ? ' shortcut' : ''}` : exhausted ? '' : m.reason}</span></div>`).join('');
     const tp = tele.size ? `<div class="m">✨ ${tele.size} room${tele.size > 1 ? 's' : ''} by teleport</div>` : '';
     h += `<div class="hud tunnels"><div class="k">${exhausted ? 'Exhausted — no more boots' : 'Tunnels from here'}</div>${rows}${tp}</div>`;
   } else if (state.pending && state.pending.pid !== me) {

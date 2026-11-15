@@ -52,8 +52,10 @@ Anything exotic can use `{ fn: (game, player, card) => ... }`.
 
 - **Map**: *Random dungeon* (default) generates a new map each game from rules in
   `server/game/board.js` (`generateBoard`): three surface rows and four Depths rows, guaranteed
-  connectivity and escape routes, hazards rolled per tunnel, the 30-point artifact behind locks,
-  features dealt from surface and Depths pools. *Classic map* uses the fixed hand-made layout.
+  connectivity and escape routes, hazards rolled per tunnel, features dealt from surface and
+  Depths pools. Master Keys open exactly two things: the **Vault** (the 30-point artifact, often
+  with a locked antechamber holding the 25-point artifact or a Major Secret) and the **Shortcut**,
+  a locked passage joining a deep room directly to the surface. *Classic map* uses the fixed hand-made layout.
 - **Turns**: *Auto-end when idle* ends a turn automatically once all cards are played and no
   action remains (nothing affordable, nowhere to go, nothing useful to use). *Manual* never does.
 

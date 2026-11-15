@@ -430,7 +430,7 @@ export class Game {
       else if (t.boots < cost) reason = `Need ${cost} boots`;
       else if (tn.locked && !p.items.masterKey) reason = 'Locked (Master Key needed)';
       else if (dmg > 0 && (p.supply < dmg || p.damage + dmg >= HEALTH_MAX)) reason = 'Too dangerous';
-      moves.push({ to: tn.to, cost, monsters, swordsUsed, damage: dmg, locked: !!tn.locked, ok: !reason, reason, via: 'move' });
+      moves.push({ to: tn.to, cost, monsters, swordsUsed, damage: dmg, locked: !!tn.locked, shortcut: !!tn.shortcut, ok: !reason, reason, via: 'move' });
     }
     const teleports = t.teleports > 0 && inDungeon ? this.board.connectedRooms(p.room).filter((r) => r !== 'start' || p.artifacts.length > 0) : [];
     const rs = this.rooms[p.room];

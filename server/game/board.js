@@ -112,7 +112,11 @@ export function classicBoard() { return new Board({ rooms: ROOMS, tunnels: TUNNE
 //    plus optional second links and horizontal links to neighbours.
 //  - Tunnel hazards are rolled per tunnel (footprints / monsters / one-way); one-way tunnels are
 //    only kept if every room can still get back to the entrance.
-//  - The 30-point artifact sits in a bottom-row room whose every tunnel is locked.
+//  - Master Keys matter in exactly two ways:
+//      * the Vault: the 30-point artifact sits in a bottom-row room, sometimes with a locked
+//        antechamber holding the 25-point artifact or a Major Secret; every way in is locked.
+//      * the Shortcut: one extra locked passage joins a deep room straight to a surface room,
+//        a fast way down early or a fast way out with the loot.
 //  - Features are dealt from a surface pool and a Depths pool with artifact depth constraints.
 // ---------------------------------------------------------------------------
 const NAMES = {
@@ -218,12 +222,23 @@ export function generateBoard(seed = Math.floor(Math.random() * 2 ** 31)) {
   const degree = (r) => tunnels.filter(([a, b]) => a === r.id || b === r.id).length;
   const nest = [...bottom].sort((a, b) => degree(a) - degree(b) || rnd() - 0.5)[0];
   assign(nest, { feature: 'artifact', artifact: 30, name: NAMES.artifact[30] });
+  // the Vault pocket: the nest plus, often, one locked antechamber next to it
+  const pocket = [nest];
+  const adjacent = (r) => rooms.filter((o) => o !== r && tunnels.some(([a, b]) => (a === r.id && b === o.id) || (b === r.id && a === o.id)));
+  const anteCands = adjacent(nest).filter((o) => o.row >= 6 && degree(o) <= 3);
+  let anteHas25 = false;
+  if (anteCands.length && rnd() < 0.65) {
+    const ante = anteCands[Math.floor(rnd() * anteCands.length)];
+    pocket.push(ante);
+    if (rnd() < 0.5) { assign(ante, { feature: 'artifact', artifact: 25, name: 'Treasure Antechamber' }); anteHas25 = true; }
+    else assign(ante, { feature: 'major', majorSecret: true, name: 'Sealed Reliquary' });
+  }
   placeArtifact(5, rows[2]);
   placeArtifact(7, rows[3]);
   placeArtifact(10, [...rows[4]]);
   placeArtifact(15, [...rows[4], ...rows[5]]);
   placeArtifact(20, [...rows[5], ...rows[6]]);
-  placeArtifact(25, [...rows[6], ...rows[7]]);
+  if (!anteHas25) placeArtifact(25, [...rows[6], ...rows[7]]);
   const dealt = (pool, list) => { const free = shuf(freeIn(list)); for (const f of pool) { const r = free.pop(); if (!r) break; assign(r, f); } };
   const featureDefs = {
     market: () => ({ feature: 'market', market: true }), crystal: () => ({ feature: 'crystal', crystal: true }), fountain: () => ({ feature: 'fountain', fountain: true }),
@@ -258,20 +273,32 @@ export function generateBoard(seed = Math.floor(Math.random() * 2 ** 31)) {
     else if (roll < 0.33) o.monsters = deep && rnd() < 0.22 ? 2 : 1;
     else if (roll < 0.41) o.oneWay = true;
   }
-  // locks: every tunnel into the nest, plus one more Depths tunnel
-  for (const t of tunnels) if (t[0] === nest.id || t[1] === nest.id) { t[2] = { locked: true }; }
-  const extra = shuf(tunnels.filter((t) => t[2].locked !== true && byId[t[0]].depths && byId[t[1]].depths && !t[2].oneWay))[0];
-  if (extra) extra[2].locked = true;
+  // locks: every tunnel crossing the Vault pocket boundary is locked and otherwise plain;
+  // tunnels inside the pocket are plain
+  const inPocket = (id) => pocket.some((r) => r.id === id);
+  for (const t of tunnels) {
+    const a = inPocket(t[0]), b = inPocket(t[1]);
+    if (a && b) t[2] = {};
+    else if (a || b) t[2] = { locked: true };
+  }
+  // the Shortcut: a locked passage from deep in the Depths straight up to the surface
+  const deepRooms = rooms.filter((r) => r.row >= 5 && !inPocket(r.id));
+  const highRooms = rooms.filter((r) => r.row >= 1 && r.row <= 2);
+  let best = null;
+  for (const d of deepRooms) for (const h of highRooms) {
+    const score = Math.abs(d.x - h.x) + rnd() * 60;
+    if (!best || score < best.score) best = { d, h, score };
+  }
+  if (best) tunnels.push([best.h.id, best.d.id, { locked: true, shortcut: true }]);
   // orient one-way tunnels: prefer pointing away from the entrance, then validate escape routes
   for (const t of tunnels) if (t[2].oneWay) { if (byId[t[0]].row > byId[t[1]].row) [t[0], t[1]] = [t[1], t[0]]; }
-  const everyoneCanEscape = () => { const back = reachable('start', { respectOneWay: true, skipLocked: true, reverse: true }); return rooms.every((r) => r.id === nest.id || back.has(r.id)); };
-  const everythingReachable = () => { const fwd = reachable('start', { respectOneWay: true, skipLocked: true }); return rooms.every((r) => r.id === nest.id || fwd.has(r.id)); };
+  const everyoneCanEscape = () => { const back = reachable('start', { respectOneWay: true, skipLocked: true, reverse: true }); return rooms.every((r) => inPocket(r.id) || back.has(r.id)); };
+  const everythingReachable = () => { const fwd = reachable('start', { respectOneWay: true, skipLocked: true }); return rooms.every((r) => inPocket(r.id) || fwd.has(r.id)); };
   for (const t of tunnels) {
     if (t[2].oneWay && !(everyoneCanEscape() && everythingReachable())) { delete t[2].oneWay; }
   }
-  if (extra && !(everyoneCanEscape() && everythingReachable())) delete extra[2].locked;
-  // the nest must be reachable at all (with a key)
-  if (!reachable('start', { respectOneWay: true }).has(nest.id)) { for (const t of tunnels) if ((t[0] === nest.id || t[1] === nest.id) && t[2].oneWay) delete t[2].oneWay; }
+  // the pocket must be reachable (with a key): drop one-ways that would seal it, then confirm
+  for (const r of pocket) if (!reachable('start', { respectOneWay: true }).has(r.id)) { for (const t of tunnels) if (t[2].oneWay) delete t[2].oneWay; }
 
   const cleanRooms = rooms.map(({ feature, row, ...r }) => r);
   const cleanTunnels = tunnels.map(([a, b, o]) => [a, b, Object.keys(o).length ? o : undefined]).map(([a, b, o]) => (o ? [a, b, o] : [a, b]));

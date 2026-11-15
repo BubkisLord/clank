@@ -127,6 +127,7 @@ g[data-mv]:hover .room, g[data-tp]:hover .room { stroke:#fff; }
 .tunnel.locked { stroke:var(--gold-2); }
 .tunnel.footprints { stroke-dasharray:9 7; }
 .tunnel.monsters { stroke:var(--blood); }
+.tunnel.shortcut { stroke:var(--gold); stroke-dasharray:3 9; stroke-width:4; opacity:.9; }
 .tlabel { font-size:14px; text-anchor:middle; pointer-events:none; }
 .tlabel-bg { fill:#0d0a10; stroke:#5a3f27; }
 .pawn { stroke:#0d0a10; stroke-width:2; filter:drop-shadow(0 2px 2px rgba(0,0,0,.6)); }

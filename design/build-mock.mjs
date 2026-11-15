@@ -182,7 +182,7 @@ const lobby = `<div class="artboard lobby" data-name="Lobby" style="background-i
   <div class="lhero">
     <div class="ltitle">CLANK<span>!</span></div>
     <div class="lsub">A DECK-BUILDING ADVENTURE</div>
-    <p class="lp">Sneak into Dragon Keep, steal an artifact, and get out before Nicki notices. Up to four thieves, any device on the network.</p>
+    <p class="lp">Sneak into Dragon Keep, steal an artifact, and get out before the dragon notices. Up to four thieves, any device on the network.</p>
     <div class="lpanel">
       <label class="field"><span>Your name</span><div class="input">Bob</div></label>
       <div class="lrow">${btn('Create game', 'primary big')}<span class="or">or</span><div class="input code">AHYA</div>${btn('Join', 'big')}</div>

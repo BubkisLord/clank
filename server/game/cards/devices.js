@@ -11,6 +11,6 @@ export default [
   { id: 'magic_spring', name: 'Magic Spring', kind: 'device', qty: 2, cost: 3, text: 'Use: Trash a card from your hand, play area or discard pile.',
     use: [{ trash: { from: ['hand', 'playArea', 'discard'], optional: true } }] },
   { id: 'wand_of_recall', name: 'Wand of Recall', kind: 'device', qty: 2, cost: 5, text: 'Use: +2 Skill. Teleport.', use: [{ skill: 2, teleport: 1 }] },
-  { id: 'wand_of_wind', name: 'Wand of Wind', kind: 'device', qty: 2, cost: 6, text: 'Use: +3 Skill. Teleport, or take a Secret from an adjacent room.',
+  { id: 'wand_of_wind', name: 'Wand of Wind', kind: 'device', qty: 2, cost: 6, dragon: true, text: 'Use: +3 Skill. Teleport, or take a Secret from an adjacent room.',
     use: [{ skill: 3 }, { choose: [{ label: 'Teleport', effects: [{ teleport: 1 }] }, { label: 'Take a Secret from an adjacent room', effects: [{ takeAdjacentSecret: true }] }] }] },
 ];

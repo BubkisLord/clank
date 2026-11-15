@@ -490,6 +490,9 @@ export class Game {
         break;
       }
       case 'playAll': {
+        // cards that ask for a decision go last, so gold/skill from the others is already counted
+        const asks = (c) => JSON.stringify(def(c).play || [], (k, v) => (typeof v === 'function' ? 'fn' : v)).match(/"(choose|discardThen|trash|replaceRow)"/) ? 1 : 0;
+        p.hand.sort((x, y) => asks(x) - asks(y));
         while (p.hand.length && !this.pending) this.playCard(p, 0);
         break;
       }
@@ -620,6 +623,7 @@ export class Game {
   stateFor(pid) {
     const me = this.playerById(pid);
     const cardView = (c) => ({ uid: c.uid, id: c.id });
+    const cur = this.phase === 'playing' ? this.currentPlayer() : null;
     const players = this.players.map((p) => ({
       id: p.id, name: p.name, color: p.color, connected: p.connected, status: p.status, koRescued: p.koRescued, onCountdown: p.onCountdown,
       room: p.room, damage: p.damage, supply: p.supply, gold: p.gold, artifacts: p.artifacts, secrets: p.secrets.map((s) => ({ uid: s.uid, id: s.id })),
@@ -627,8 +631,10 @@ export class Game {
       deckCount: p.deck.length, handCount: p.hand.length, discard: p.discard.map(cardView), playArea: p.playArea.map(cardView), trashedCount: p.trashed.length,
       // deck contents are public knowledge but the order is secret: sent alphabetically
       deck: [...p.deck].map(cardView).sort((x, y) => def(x).name.localeCompare(def(y).name)), trashed: p.trashed.map(cardView),
-      hand: p.id === pid ? p.hand.map(cardView) : undefined,
+      // your own hand, plus the hand of whoever is taking their turn (spectating)
+      hand: p.id === pid || p === cur ? p.hand.map(cardView) : undefined,
       score: this.phase === 'playing' ? this.score(p, true).total : undefined,
+      scoreBreakdown: this.phase === 'playing' ? this.score(p, true).breakdown : undefined,
       allCards: this.phase === 'ended' ? [...p.deck, ...p.hand, ...p.discard, ...p.playArea].map(cardView) : undefined,
     }));
     const base = { code: this.code, phase: this.phase, version: this.version, me: pid, players, logs: this.logs.slice(-80), options: this.options };
@@ -644,7 +650,7 @@ export class Game {
       bag: { black: this.bag.black, total: Object.values(this.bag).reduce((s, v) => s + v, 0) }, setAside: this.setAside.black,
       rooms: this.rooms, market: this.market, masteryTokens: this.masteryTokens, countdown: this.countdown,
       currentPlayer: this.currentPlayer()?.id, turn: this.turn, turnNumber: this.turnNumber,
-      pending: this.pending ? { pid: this.pending.pid, title: this.pending.title, options: this.pending.pid === pid ? this.pending.options : undefined } : null,
+      pending: this.pending ? { pid: this.pending.pid, title: this.pending.title, options: this.pending.options, spectating: this.pending.pid !== pid } : null,
       legal: me ? this.legalFor(me) : null,
       results: this.results || null,
       lastAttack: this.lastAttack || null,

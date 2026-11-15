@@ -35,7 +35,7 @@ export const ROOMS = [
   { id: 'b14', name: 'Troll Den', x: 290, y: 870, artifact: 25, depths: true },
   { id: 'b15', name: 'Ancient Altar', x: 540, y: 890, majorSecret: true, depths: true },
   { id: 'b16', name: 'Black Market', x: 760, y: 870, market: true, depths: true },
-  { id: 'b17', name: "Nicki's Nest", x: 930, y: 890, artifact: 30, depths: true },
+  { id: 'b17', name: "Dragon's Nest", x: 930, y: 890, artifact: 30, depths: true },
 ];
 
 export const TUNNELS = [
@@ -149,7 +149,7 @@ const NAMES = {
   monkey: ['Monkey Shrine'],
   major: ['Chapel', 'Shrine of Secrets', 'Sunken Library', 'Ancient Altar', 'Sealed Reliquary', 'Oracle’s Cell'],
   minor: ['Guard Post', 'Store Room', 'Lookout', 'Lower Cells', 'Ossuary', 'Thieves’ Cache', 'Abandoned Camp', 'Crypt Niche', 'Hidden Alcove'],
-  artifact: { 5: 'Armory', 7: 'Treasury Vault', 10: 'Forgotten Vault', 15: 'Dragon Hoard', 20: 'Golem Workshop', 25: 'Troll Den', 30: "Nicki’s Nest" },
+  artifact: { 5: 'Armory', 7: 'Treasury Vault', 10: 'Forgotten Vault', 15: 'Dragon Hoard', 20: 'Golem Workshop', 25: 'Troll Den', 30: "Dragon’s Nest" },
 };
 
 export function makeRng(seed) {

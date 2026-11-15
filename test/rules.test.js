@@ -162,3 +162,33 @@ test('random map games complete under random play', async () => {
   assert.ok(g.board.name.startsWith('random'));
   assert.ok(g.stateFor(g.players[0].id).board.rooms.length > 20);
 });
+
+test('treasure secrets pay out spendable gold immediately', () => {
+  const g = setup();
+  const p = cur(g);
+  const before = p.gold;
+  g.takeSecret(p, { id: 'treasure', major: false });
+  g.process();
+  assert.equal(p.gold, before + 2);
+  assert.ok(!p.secrets.some((s) => s.id === 'treasure'));
+});
+
+test('play all resolves Underworld Dealing after gold cards, so tomes can be afforded', () => {
+  const g = setup();
+  const p = cur(g);
+  p.gold = 3;
+  p.hand = [makeCard('underworld_dealing'), makeCard('pickaxe'), makeCard('rebel_miner')];
+  g.act(p.id, { type: 'playAll' });
+  assert.ok(g.pending, 'should be asked to choose');
+  assert.ok(g.pending.options.some((o) => /Secret Tomes/.test(o.label)));
+});
+
+test('other players can see the current player hand but not each other', () => {
+  const g = setup();
+  const p = cur(g);
+  const other = g.players.find((x) => x !== p);
+  const view = g.stateFor(other.id);
+  assert.ok(view.players.find((x) => x.id === p.id).hand, 'current player hand visible');
+  const v2 = g.stateFor(p.id);
+  assert.equal(v2.players.find((x) => x.id === other.id).hand, undefined);
+});

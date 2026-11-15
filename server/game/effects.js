@@ -54,6 +54,7 @@ export function applyEffect(game, p, e, card) {
 
   if (e.choose) {
     const opts = e.choose.filter((o) => !o.requires || (o.requires.gold == null || p.gold >= o.requires.gold));
+    for (const o of e.choose) if (!opts.includes(o)) game.log(`${p.name} cannot afford "${o.label}" (${p.gold}/${o.requires.gold} gold)`);
     if (opts.length === 0) return;
     if (opts.length === 1) return game.queueFront(p, opts[0].effects, card);
     game.prompt(p, {

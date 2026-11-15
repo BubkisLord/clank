@@ -83,6 +83,10 @@ reconstructed from memory and reviews, not from an official card list, so some c
 values, quantities, and the exact room graph may differ from the physical game. Both are plain
 data files — correct a card by editing one line.
 
+Which cards carry the Dragon Attack symbol (`dragon: true`) is also a best guess: 25 of the
+100 dungeon cards have it, mostly the strong buys plus the Ogre, Overlord and Cave Troll. Toggle
+the flag on any card to match your copy of the game.
+
 ## Art
 
 `public/assets/` holds original artwork generated for this project (room tiles, card-kind

@@ -16,11 +16,11 @@
     <div class="hero">
       <div class="crest"><img src="assets/dragon.svg" alt=""></div>
       <h1 class="title">Clank<span>!</span></h1>
-      <p class="sub">A Deck-Building Adventure</p>
-      <p class="blurb">Sneak into Dragon Keep, steal an artifact, and slip out before Nicki wakes. Two to four thieves, any device on the network.</p>
+      <p class="sub">A Deck-Building Game</p>
+      <p class="blurb">Sneak into Dragon Keep, steal an artifact, and slip out before the dragon wakes.</p>
     </div>
     <div class="scroll-panel">
-      <label class="field"><span>Thief's name</span><input id="name" maxlength="20" placeholder="Nameless Rogue"></label>
+      <label class="field"><span>Player Name</span><input id="name" maxlength="20" placeholder="Thief"></label>
       <div class="row">
         <button id="createBtn" class="primary big">Found a new heist</button>
         <span class="or">or join</span>
@@ -40,12 +40,12 @@
       <p class="sub">Gathering the crew</p>
     </div>
     <div class="scroll-panel">
-      <p class="muted">Share this link with the other thieves:</p>
-      <code id="shareLink" class="share"></code>
+      <p class="muted">Share this link with the other players (click to copy):</p>
+      <code id="shareLink" class="share" title="Click to copy"></code>
       <ul id="waitPlayers"></ul>
       <div id="options"></div>
-      <button id="startBtn" class="primary big">Begin the heist</button>
-      <p class="muted">2–4 players recommended. One player is allowed for testing.</p>
+      <button id="startBtn" class="primary big">Begin</button>
+      <p class="muted">2–4 players recommended.</p>
     </div>
   </section>
 
@@ -79,8 +79,8 @@
         </div>
         <div id="meBottom">
           <div class="zone hand-zone"><h4>Hand</h4><div id="hand" class="cards"></div></div>
-          <div class="zone"><h4>Played</h4><div id="playArea" class="cards small"></div></div>
-          <div class="zone"><h4>Loot</h4><div id="tokens"></div></div>
+          <div class="zone played-zone"><h4>Played</h4><div id="playArea" class="cards small"></div></div>
+          <div class="zone loot-zone"><h4>Loot</h4><div id="tokens"></div></div>
         </div>
       </footer>
     </div>
@@ -90,7 +90,7 @@
       <button data-tab="hand">✋ Hand</button>
     </nav>
     <div id="prompt" class="modal hidden"><div class="modal-box"><h3 id="promptTitle"></h3><div id="promptOptions" class="cards"></div></div></div>
-    <div id="results" class="modal hidden"><div class="modal-box wide"><h2>The Tale Is Told</h2><div id="resultsBody"></div><button class="primary" onclick="location.reload()">Back to the tavern</button></div></div>
+    <div id="results" class="modal hidden"><div class="modal-box wide"><h3><span>The Tale Is Told</span><button id="resultsClose" class="defer">✕ Close</button></h3><div id="resultsBody"></div><button id="leaveBtn" class="primary">Back to the tavern</button></div></div>
     <div id="viewer" class="modal hidden"><div class="modal-box wide"><h3 id="viewerTitle"></h3><div id="viewerBody"></div></div></div>
     <div id="banner" class="hidden"></div>
     <div id="toast" class="hidden"></div>

@@ -86,6 +86,43 @@ function showTab(t) { const b = document.querySelector(`#tabbar [data-tab="${t}"
 $('createBtn').onclick = () => send({ type: 'create', name: $('name').value || 'Thief' });
 $('joinBtn').onclick = () => send({ type: 'join', code: $('code').value, name: $('name').value || 'Thief' });
 $('startBtn').onclick = () => send({ type: 'start' });
+$('shareLink').onclick = async () => {
+  const text = $('shareLink').textContent;
+  try { await navigator.clipboard.writeText(text); }
+  catch { // plain-http LAN addresses have no clipboard API: fall back to a hidden textarea
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+  }
+  $('shareLink').classList.add('copied'); setTimeout(() => $('shareLink').classList.remove('copied'), 1200);
+  toast('Link copied to clipboard');
+};
+
+// ---------- leaving / dialogs ----------
+function leaveGame() {
+  const code = state?.code;
+  send({ type: 'leave' });
+  if (code) { sessionStorage.removeItem('clank:' + code); localStorage.removeItem('clank:' + code); }
+  state = null; me = null; resultsDismissed = false; viewOwn = false;
+  ['waiting', 'game', 'prompt', 'results', 'viewer'].forEach((id) => $(id).classList.add('hidden'));
+  $('lobby').classList.remove('hidden');
+  $('code').value = ''; $('rejoin').classList.add('hidden'); $('lobbyError').textContent = '';
+  history.replaceState(null, '', location.pathname);
+  document.title = 'Clank!';
+  refreshOpenGames();
+}
+let resultsDismissed = false;
+function closeModal(id) {
+  if (id === 'viewer') $('viewer').classList.add('hidden');
+  else if (id === 'prompt') { if (isMyTurn() && state.pending) act({ type: 'defer' }); }
+  else if (id === 'results') { resultsDismissed = true; $('results').classList.add('hidden'); }
+}
+for (const id of ['viewer', 'prompt', 'results']) $(id).addEventListener('click', (e) => { if (e.target === $(id)) closeModal(id); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  for (const id of ['viewer', 'results', 'prompt']) if (!$(id).classList.contains('hidden')) return closeModal(id);
+});
+$('leaveBtn').onclick = leaveGame;
+$('resultsClose').onclick = () => closeModal('results');
 $('name').value = localStorage.getItem('clank:name') || '';
 $('name').onchange = () => localStorage.setItem('clank:name', $('name').value);
 
@@ -110,16 +147,17 @@ function cardHTML(def, { cost, count, buttons = '', playable = false, small = fa
   const kind = def.reserve ? 'reserve ' + def.kind : def.kind;
   const c = cost ?? def.cost;
   const costLabel = def.kind === 'monster' ? `⚔ ${def.swords}` : (c > 0 || def.reserve ? `${c}` : '');
-  const icons = (def.dragon ? '🐉' : '') + (def.danger ? '☠' : '');
+  const badges = (def.dragon ? '<span class="badge dragon-ic" title="Dragon Attack: the dragon attacks when this card enters the Dungeon Row"><img src="assets/dragon.svg" alt="Dragon"></span>' : '')
+    + (def.danger ? '<span class="badge danger-ic" title="Danger: each dragon attack draws 1 extra cube while this is in the row">☠</span>' : '');
   const art = artFor(def);
   const subtype = def.kind === 'monster' ? 'Monster' : def.kind === 'device' ? 'Device' : def.tags.includes('gem') ? 'Gem' : def.tags.includes('companion') ? 'Companion' : def.tags.includes('equipment') ? 'Item' : '';
   return `<div class="card ${kind} ${art} ${playable ? 'playable' : ''}" title="${def.text}">
     <div class="art" style="background-image:url(assets/cards/card-${art}.jpg)"></div>
-    <div class="banner"><span>${def.name}</span><span>${count != null ? `<span class="count">×${count}</span>` : ''}${icons ? `<span class="icons" title="${def.dragon ? 'Dragon attack when revealed. ' : ''}${def.danger ? 'Danger: +1 cube per attack' : ''}">${icons}</span>` : ''}</span></div>
+    <div class="banner"><span>${def.name}</span><span>${count != null ? `<span class="count">×${count}</span>` : ''}</span></div>
     ${subtype ? `<div class="subtype">${subtype}</div>` : ''}
     <div class="body">${def.text}</div>
     ${buttons ? `<div class="act">${buttons}</div>` : ''}
-    <div class="foot"><span class="pts">${def.points ? def.points + ' pts' : ''}</span>${costLabel ? `<span class="cost">${costLabel}</span>` : ''}</div>
+    <div class="foot"><span class="pts">${def.points ? def.points + ' pts' : ''}</span><span class="fr">${badges}${costLabel ? `<span class="cost">${costLabel}</span>` : ''}</span></div>
   </div>`;
 }
 
@@ -137,7 +175,7 @@ function announce() {
     seenAttack = state.lastAttack.at;
   }
   const mine = isMyTurn();
-  if (mine && !wasMyTurn && state.phase === 'playing') { toast('Your turn, thief.', 'gold'); }
+  if (mine && !wasMyTurn && state.phase === 'playing') { toast('Your turn!', 'gold'); }
   wasMyTurn = mine;
   document.title = (mine ? '● ' : '') + 'Clank!';
 }
@@ -161,6 +199,11 @@ function render() {
   }
   $('waiting').classList.add('hidden'); $('game').classList.remove('hidden');
   renderPlayers(); renderDragon(); renderBoard(); renderRow(); renderReserve(); renderMarket(); renderLog(); renderMe(); renderPrompt(); renderResults(); announce();
+  if (!$('viewer').classList.contains('hidden')) { // keep an open player sheet live
+    const box = $('viewer').querySelector('.modal-box'), y = box.scrollTop;
+    const vp = state.players.find((x) => x.id === $('viewer').dataset.pid);
+    if (vp) { showCards(vp); box.scrollTop = y; }
+  }
   scheduleInline();
 }
 
@@ -193,20 +236,43 @@ function groupCards(cards) {
   return [...m.values()].sort((x, y) => x.def.name.localeCompare(y.def.name));
 }
 function showCards(p) {
+  p = state.players.find((x) => x.id === p.id) || p; // always the freshest copy
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const handNote = p.hand ? (p.id === me ? '' : 'visible while it is their turn') : `${plural(p.handCount, 'card')}, hidden until their turn`;
   const sections = [
-    ['Deck', p.deck, `${p.deckCount} card${p.deckCount === 1 ? '' : 's'}, shown alphabetically — the draw order stays secret`, true],
-    ['Discard pile', [...p.discard].reverse(), `${p.discard.length} card${p.discard.length === 1 ? '' : 's'}, newest first`, false],
+    ['Hand', p.hand || [], handNote, false],
     ['Play area', p.playArea, '', false],
+    ['Deck', p.deck, `${plural(p.deckCount, 'card')}, shown alphabetically`, true],
+    ['Discard pile', [...p.discard].reverse(), `${plural(p.discard.length, 'card')}, newest first`, false],
     ['Trashed', p.trashed, 'removed from the game', true],
   ];
-  if (p.id === me) sections.splice(1, 0, ['Hand', p.hand || [], '', false]);
-  const pts = p.score != null ? ` · ${p.score} pts if they left now` : '';
-  $('viewerTitle').innerHTML = `<span>${esc(p.name)}'s cards${pts}</span><button id="viewerClose" class="defer">✕ Close</button>`;
-  $('viewerBody').innerHTML = sections.map(([title, cards, note, grouped]) => `<div class="vsec"><h4>${title} <span class="muted">${note}</span></h4><div class="cards small">${cards.length ? (grouped ? groupCards(cards).map((g) => cardHTML(g.def, { count: g.n > 1 ? g.n : undefined })).join('') : cards.map((c) => cardHTML(cdef(c))).join('')) : '<span class="muted">empty</span>'}</div></div>`).join('');
+  const st = p.status === 'in' ? `In ${esc(room(p.room).name)}` : p.status === 'escaped' ? 'Escaped the dungeon' : p.koRescued ? 'Knocked out · rescued' : 'Knocked out · lost';
+  const stat = (k, v, sub = '') => `<div class="ps"><small>${k}</small><b>${v}</b>${sub ? `<span>${sub}</span>` : ''}</div>`;
+  const stats = [
+    stat('Points', p.score ?? '—', state.phase === 'playing' ? 'if they escaped now' : ''),
+    stat('Gold', p.gold),
+    stat('Health', `${10 - p.damage}/10`, p.damage ? `${p.damage} damage` : 'unhurt'),
+    stat('Clank!', p.clankArea, `in the area · ${p.inBag} in the bag · ${p.supply} in supply`),
+    stat('Cards', p.deckCount + p.handCount + p.discard.length + p.playArea.length, `deck ${p.deckCount} · hand ${p.handCount} · discard ${p.discard.length}`),
+  ].join('');
+  const loot = [];
+  for (const v of p.artifacts) loot.push(`🏺 Artifact <b>${v}</b>`);
+  for (const sx of p.secrets) { const d = sdef(sx.id); loot.push(`${d.points ? '🏆' : '🧪'} ${esc(d.name)}${d.points ? ` <b>${d.points}</b>` : ''}`); }
+  if (p.monkeyIdols) loot.push(`🐒 Monkey Idol ×${p.monkeyIdols} <b>${p.monkeyIdols * 5}</b>`);
+  if (p.items.masterKey) loot.push(`🔑 Master Key <b>5</b>`);
+  if (p.items.backpack) loot.push(`🎒 Backpack <b>5</b>`);
+  for (const c of p.items.crowns) loot.push(`👑 Crown <b>${c}</b>`);
+  if (p.mastery) loot.push(`🏅 Mastery <b>20</b>`);
+  const b = p.scoreBreakdown;
+  const bd = b ? `<div class="breakdown">${[['Artifacts', b.artifacts], ['Secrets', b.secrets], ['Idols', b.monkeyIdols], ['Items', b.items], ['Gold', b.gold], ['Cards', b.cards + b.bonus], ['Mastery', b.mastery]].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('')}</div>` : '';
+  $('viewerTitle').innerHTML = `<span class="vt"><i class="av" style="background:${COLOR[p.color]}">${esc(p.name[0].toUpperCase())}</i>${esc(p.name)}${p.id === me ? ' <em>(you)</em>' : ''}<small>${st}${p.onCountdown ? ' · on countdown' : ''}${p.connected ? '' : ' · disconnected'}</small></span><button id="viewerClose" class="defer">✕ Close</button>`;
+  const backs = (n) => Array.from({ length: n }, () => '<div class="card back"><img src="assets/dragon.svg" alt=""></div>').join('');
+  $('viewerBody').innerHTML = `<div class="pstats">${stats}</div>${bd}<div class="vsec"><h4>Loot</h4><div class="lootlist">${loot.length ? loot.map((x) => `<span>${x}</span>`).join('') : '<span class="muted">nothing yet</span>'}</div></div>`
+    + sections.map(([title, cards, note, grouped]) => `<div class="vsec"><h4>${title} <span class="muted">${note}</span></h4><div class="cards small">${title === 'Hand' && !p.hand && p.handCount ? backs(p.handCount) : cards.length ? (grouped ? groupCards(cards).map((g) => cardHTML(g.def, { count: g.n > 1 ? g.n : undefined })).join('') : cards.map((c) => cardHTML(cdef(c))).join('')) : '<span class="muted">empty</span>'}</div></div>`).join('');
+  $('viewer').dataset.pid = p.id;
   $('viewer').classList.remove('hidden');
-  $('viewerClose').onclick = () => $('viewer').classList.add('hidden');
+  $('viewerClose').onclick = () => closeModal('viewer');
 }
-
 function renderDragon() {
   const track = STATIC.rules.rageTrack.map((v, i) => `<b class="${i === state.rage ? 'on' : i < state.rage ? 'past' : ''}">${v}</b>`).join('');
   const cd = state.countdown ? `<div class="dm">⏳ ${esc(state.players.find((p) => p.id === state.countdown.pid).name)} on countdown space <b>${state.countdown.pos + 1}/5</b></div>` : '';
@@ -270,13 +336,13 @@ function renderBoard() {
     if (mp && mp.room === r.id && mp.status === 'in') cls.push('here');
     const info = [];
     if (rs.artifact) info.push(`🏺 ${rs.artifact}`);
-    if (rs.majorSecret) info.push('★ Major');
+    if (rs.majorSecret) info.push('★ Major Secret');
     if (rs.minorSecrets.length) info.push(`? ×${rs.minorSecrets.length}`);
-    if (rs.monkeyIdols) info.push(`🐒 ×${rs.monkeyIdols}`);
-    if (r.crystal) info.push('💎 cave');
-    if (r.market) info.push('🛒 market');
-    if (r.fountain) info.push('⛲ heal 1');
-    if (r.start) info.push('🏅 exit');
+    if (rs.monkeyIdols) info.push(`×${rs.monkeyIdols} Idols Left`);
+    if (r.crystal) info.push('Crystal Cave');
+    if (r.market) info.push('Market');
+    if (r.fountain) info.push('Healing Fountain');
+    if (r.start) info.push('Exit');
     let title = r.name;
     if (m) title += m.ok ? ` — move (${m.cost} boot${m.cost > 1 ? 's' : ''}${m.monsters ? `, ${m.swordsUsed} sword(s) used, ${m.damage} damage` : ''})` : ` — ${m.reason}`;
     const rx = r.x - W / 2, ry = r.y - H / 2;
@@ -371,63 +437,90 @@ function renderLog() {
   el.scrollTop = el.scrollHeight;
 }
 
+// Cards whose uid we have not drawn before get an entrance animation.
+const seenUids = { hand: new Set(), playArea: new Set() };
+function animateNew(container, key) {
+  const fresh = [...container.querySelectorAll('[data-uid]')].filter((el) => !seenUids[key].has(el.dataset.uid));
+  fresh.forEach((el, i) => { el.classList.add(key === 'hand' ? 'deal' : 'slam'); el.style.animationDelay = `${i * 70}ms`; });
+  seenUids[key] = new Set([...container.querySelectorAll('[data-uid]')].map((el) => el.dataset.uid));
+}
+let viewOwn = false, lastCurrent = null;
 function renderMe() {
   const p = myPlayer();
   const t = state.turn;
   const mine = isMyTurn();
   const cur = state.players.find((x) => x.id === state.currentPlayer);
+  if (state.currentPlayer !== lastCurrent) { viewOwn = false; lastCurrent = state.currentPlayer; }
+  // not your turn: spectate whoever is playing (toggle back to your own hand any time)
+  const watching = !mine && state.phase === 'playing' && cur && cur.id !== me && !viewOwn;
+  const v = watching ? cur : p;
   let status;
-  if (p.status === 'escaped' && mine) status = `You escaped${p.mastery ? ' with a Mastery token' : ''}! Spend what you have left, then end your turn.`;
+  if (watching) status = `Watching ${cur.name}${state.pending ? ` — deciding: ${state.pending.title}` : ''}`;
+  else if (p.status === 'escaped' && mine) status = `You escaped${p.mastery ? ' with a Mastery token' : ''}! Spend what you have left, then end your turn.`;
   else if (p.status !== 'in') status = p.status === 'escaped' ? `You escaped${p.mastery ? ' with a Mastery token' : ''}! Waiting for the others…` : p.koRescued ? 'You were knocked out but rescued — your loot counts.' : 'You were knocked out in the dungeon. Better luck next heist.';
   else if (mine) status = state.pending ? 'Make your choice…' : p.hand.length ? 'Your turn — play your cards' : 'Spend your skill, swords and boots';
-  else status = `${esc(cur?.name ?? '…')} is sneaking about${state.pending ? ' (deciding…)' : ''}`;
+  else if (state.phase === 'ended') status = 'The heist is over.';
+  else status = `Your next hand · ${cur?.name ?? '…'} is playing`;
   $('status').textContent = status;
-  $('status').className = mine ? 'yours' : '';
-
-  const res = mine ? t : { skill: 0, swords: 0, boots: 0, teleports: 0 };
-  $('resources').innerHTML = [['Skill', res.skill, '🧠'], ['Swords', res.swords, '⚔'], ['Boots', res.boots, '👢'], ['Gold', p.gold, '🪙'], ['Teleport', res.teleports || 0, '✨'], ['Health', 10 - p.damage, '♥']]
-    .map(([n, v, ic]) => `<div class="res ${v === 0 && n !== 'Health' ? 'zero' : ''}" title="${n}">${ic} <b>${v}</b><small>${n}</small></div>`).join('')
-    + (mine && t.negativeClank ? `<div class="res" title="Negative Clank! available"><b>-${t.negativeClank}</b><small>clank</small></div>` : '')
-    + (mine && t.enteredCrystalCave && !t.flags.ignoreCrystalCaves ? `<div class="res" title="You entered a Crystal Cave">💎<small>exhausted</small></div>` : '');
-
+  $('status').className = mine ? 'yours' : watching ? 'watching' : '';
+  $('me').classList.toggle('spectating', !!watching);
+  $('me').style.setProperty('--who', COLOR[v.color]);
+  const res = (mine || watching) && t ? t : { skill: 0, swords: 0, boots: 0, teleports: 0 };
+  $('resources').innerHTML = [['Skill', res.skill, '🧠'], ['Swords', res.swords, '⚔'], ['Boots', res.boots, '👢'], ['Gold', v.gold, '🪙'], ['Teleport', res.teleports || 0, '✨'], ['Health', 10 - v.damage, '♥']]
+    .map(([n, val, ic]) => `<div class="res ${val === 0 && n !== 'Health' ? 'zero' : ''}" title="${n}">${ic} <b>${val}</b><small>${n}</small></div>`).join('')
+    + ((mine || watching) && t?.negativeClank ? `<div class="res" title="Negative Clank! available"><b>-${t.negativeClank}</b><small>clank</small></div>` : '')
+    + ((mine || watching) && t?.enteredCrystalCave && !t.flags.ignoreCrystalCaves ? `<div class="res" title="Entered a Crystal Cave">💎<small>exhausted</small></div>` : '');
   let a = '';
   if (mine && !state.pending) {
     const L = state.legal;
     if (p.hand.length) a += `<button id="playAll" class="primary">Play all cards</button>`;
     if (L?.canTakeArtifact) a += `<button id="takeArt" class="primary">Take Artifact (${state.rooms[p.room].artifact})</button>`;
     if (t.teleports > 0 && p.status === 'in') a += `<button id="tpMode" ${teleportMode ? 'class="primary"' : ''}>${teleportMode ? 'Cancel teleport' : `Teleport (${t.teleports})`}</button>`;
-    for (const d of L?.deferred || []) a += `<button class="resume" data-resume="${d.i}" title="Return to this postponed choice">↩ ${d.title}</button>`;
+    for (const d of L?.deferred || []) a += `<button class="resume" data-resume="${d.i}" title="Return to this postponed choice">↩ ${esc(d.title)}</button>`;
     a += `<button id="endTurn" class="${!p.hand.length && !L?.hasAction ? 'primary' : ''}">End turn${p.hand.length ? ` (${p.hand.length} unplayed)` : ''}</button>`;
+  } else if (!mine && state.phase === 'playing' && cur && cur.id !== me) {
+    a += `<button id="viewToggle">${watching ? '✋ Show my hand' : `👁 Watch ${esc(cur.name)}`}</button>`;
   }
+  if (state.phase === 'ended') a += `<button id="showResults" class="primary">📜 Results</button><button id="leaveEnded">Back to the tavern</button>`;
   $('actions').innerHTML = a;
   $('actions').querySelectorAll('[data-resume]').forEach((b) => { b.onclick = () => act({ type: 'resume', index: Number(b.dataset.resume) }); });
   if ($('playAll')) $('playAll').onclick = () => act({ type: 'playAll' });
   if ($('takeArt')) $('takeArt').onclick = () => act({ type: 'takeArtifact' });
   if ($('tpMode')) $('tpMode').onclick = () => { teleportMode = !teleportMode; render(); };
+  if ($('viewToggle')) $('viewToggle').onclick = () => { viewOwn = !viewOwn; render(); };
+  if ($('showResults')) $('showResults').onclick = () => { resultsDismissed = false; render(); };
+  if ($('leaveEnded')) $('leaveEnded').onclick = leaveGame;
   if ($('endTurn')) $('endTurn').onclick = () => {
     const unplayed = p.hand.length, postponed = (state.legal?.deferred || []).length;
     if ((unplayed || postponed) && !confirm(`End your turn now?${unplayed ? ` ${unplayed} card${unplayed > 1 ? 's' : ''} in hand will be discarded unplayed.` : ''}${postponed ? ' Postponed choices will lapse.' : ''}`)) return;
     act({ type: 'endTurn' });
   };
-
-  $('hand').innerHTML = (p.hand || []).map((c) => `<div data-play="${c.uid}">${cardHTML(cdef(c), { playable: mine && !state.pending })}</div>`).join('') || `<span class="muted">${mine ? 'All cards played — spend your resources, then end your turn.' : 'Waiting for your next hand.'}</span>`;
+  const who = watching ? `${esc(cur.name)}'s` : 'Your';
+  document.querySelector('.hand-zone h4').innerHTML = `${who} hand`;
+  document.querySelector('.played-zone h4').innerHTML = watching ? `${who} play area` : 'Played';
+  document.querySelector('.loot-zone h4').innerHTML = `${who} loot`;
+  // switching between your hand and someone else's should deal the new hand in
+  if ($('hand').dataset.viewing !== v.id) { seenUids.hand = new Set(); seenUids.playArea = new Set(); $('hand').dataset.viewing = v.id; }
+  const hand = v.hand || [];
+  $('hand').innerHTML = hand.map((c) => `<div data-play="${c.uid}" data-uid="${c.uid}">${cardHTML(cdef(c), { playable: mine && !state.pending })}</div>`).join('')
+    || `<span class="muted">${mine ? 'All cards played — spend your resources, then end your turn.' : watching ? `${esc(cur.name)} has played every card.` : 'Waiting for your next hand.'}</span>`;
   if (mine) $('hand').querySelectorAll('[data-play]').forEach((d) => { d.onclick = () => { if (!state.pending) act({ type: 'play', uid: d.dataset.play }); }; });
-  $('playArea').innerHTML = p.playArea.map((c) => cardHTML(cdef(c))).join('') || '<span class="muted">nothing yet</span>';
-
+  animateNew($('hand'), 'hand');
+  $('playArea').innerHTML = v.playArea.map((c) => `<div data-uid="${c.uid}">${cardHTML(cdef(c))}</div>`).join('') || '<span class="muted">nothing yet</span>';
+  animateNew($('playArea'), 'playArea');
   const toks = [];
-  for (const s of p.secrets) { const d = sdef(s.id); const val = d.points ? ` · ${d.points} pts` : d.gold ? ` · ${d.gold} gold` : ''; toks.push(`<div class="tok" title="${d.text}">${d.name}${val}${d.use === 'held' && mine && !state.pending ? `<button data-use="${s.uid}">Use</button>` : ''}</div>`); }
-  for (const v of p.artifacts) toks.push(`<div class="tok">🏺 Artifact ${v}</div>`);
-  if (p.monkeyIdols) toks.push(`<div class="tok">🐒 Monkey Idol ×${p.monkeyIdols} (5 pts each)</div>`);
-  if (p.items.masterKey) toks.push(`<div class="tok">🔑 Master Key ×${p.items.masterKey}</div>`);
-  if (p.items.backpack) toks.push(`<div class="tok">🎒 Backpack ×${p.items.backpack}</div>`);
-  for (const c of p.items.crowns) toks.push(`<div class="tok">👑 Crown ${c}</div>`);
-  if (p.mastery) toks.push(`<div class="tok">🏅 Mastery (20 pts)</div>`);
-  toks.push(`<button class="piles" id="viewPiles" title="See your deck (alphabetical), discard pile and trashed cards">📚 Deck ${p.deckCount} · Discard ${p.discard.length}${p.trashedCount ? ` · Trashed ${p.trashedCount}` : ''}</button>`);
+  for (const s of v.secrets) { const d = sdef(s.id); const val = d.points ? ` · ${d.points} pts` : d.gold ? ` · ${d.gold} gold` : ''; toks.push(`<div class="tok" title="${d.text}">${d.name}${val}${d.use === 'held' && mine && !state.pending ? `<button data-use="${s.uid}">Use</button>` : ''}</div>`); }
+  for (const x of v.artifacts) toks.push(`<div class="tok">🏺 Artifact ${x}</div>`);
+  if (v.monkeyIdols) toks.push(`<div class="tok">🐒 Monkey Idol ×${v.monkeyIdols} (5 pts each)</div>`);
+  if (v.items.masterKey) toks.push(`<div class="tok">🔑 Master Key ×${v.items.masterKey}</div>`);
+  if (v.items.backpack) toks.push(`<div class="tok">🎒 Backpack ×${v.items.backpack}</div>`);
+  for (const c of v.items.crowns) toks.push(`<div class="tok">👑 Crown ${c}</div>`);
+  if (v.mastery) toks.push(`<div class="tok">🏅 Mastery (20 pts)</div>`);
+  toks.push(`<button class="piles" id="viewPiles" title="Deck (alphabetical), discard pile, stats and score">📚 Deck ${v.deckCount} · Discard ${v.discard.length}${v.trashedCount ? ` · Trashed ${v.trashedCount}` : ''}</button>`);
   $('tokens').innerHTML = toks.join('');
-  $('viewPiles').onclick = () => showCards(p);
+  $('viewPiles').onclick = () => showCards(v);
   $('tokens').querySelectorAll('[data-use]').forEach((b) => { b.onclick = () => act({ type: 'useSecret', uid: b.dataset.use }); });
 }
-
 function renderPrompt() {
   const pr = state.pending;
   if (!pr || pr.pid !== me || !pr.options) { $('prompt').classList.add('hidden'); return; }
@@ -439,7 +532,7 @@ function renderPrompt() {
 }
 
 function renderResults() {
-  if (state.phase !== 'ended' || !state.results) { $('results').classList.add('hidden'); return; }
+  if (state.phase !== 'ended' || !state.results || resultsDismissed) { $('results').classList.add('hidden'); return; }
   $('results').classList.remove('hidden');
   const rows = state.results.map((r, i) => {
     const b = r.breakdown;

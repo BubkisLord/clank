@@ -123,14 +123,15 @@ g[data-mv]:hover .room, g[data-tp]:hover .room { stroke:#fff; }
 .room.can-teleport { stroke:#c08cf0; stroke-width:4; stroke-dasharray:9 5; cursor:pointer; }
 .rname { fill:#f6ead0; font-family:var(--display); font-size:17px; font-weight:700; text-anchor:middle; pointer-events:none; letter-spacing:.3px; }
 .rinfo { fill:#e9d9b6; font-family:var(--body); font-size:12.5px; text-anchor:middle; pointer-events:none; }
-.tunnel-bg { stroke:#0d0a10; stroke-width:12; fill:none; stroke-linecap:round; stroke-linejoin:round; }
-.tunnel { stroke:#e3d4ad; stroke-width:6; fill:none; stroke-linecap:round; stroke-linejoin:round; }
-.tunnel.locked { stroke:var(--gold); }
-.tunnel.footprints { stroke-dasharray:12 9; }
-.tunnel.monsters { stroke:#e0574a; }
-.tunnel.shortcut { stroke:var(--gold); stroke-dasharray:4 10; stroke-width:6; }
+.tunnel-bg { stroke:#120d0a; stroke-width:9; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+.tunnel { stroke:#e9a93c; stroke-width:6.5; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+.tunnel.locked { stroke:#ffd84d; }
+.tunnel.footprints { stroke:#5ec8e8; stroke-dasharray:12 9; }
+.tunnel.monsters { stroke:#ff5a48; }
+.tunnel.shortcut { stroke:#ffd84d; stroke-dasharray:4 10; stroke-width:6.5; }
 .tlabel { font-size:15px; text-anchor:middle; pointer-events:none; }
 .tlabel-bg { fill:#0d0a10; stroke:#8a7256; stroke-width:1.5; }
+#board marker path { fill:#e9a93c; }
 .pawn { stroke:#0d0a10; stroke-width:2; filter:drop-shadow(0 2px 2px rgba(0,0,0,.6)); }
 .pawn-ring { stroke-width:3; transform-box:fill-box; transform-origin:center; animation:ring 1.6s ease-out infinite; }
 @keyframes ring { from { transform:scale(1); opacity:.9; } to { transform:scale(2.4); opacity:0; } }

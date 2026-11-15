@@ -620,6 +620,8 @@ export class Game {
       room: p.room, damage: p.damage, supply: p.supply, gold: p.gold, artifacts: p.artifacts, secrets: p.secrets.map((s) => ({ uid: s.uid, id: s.id })),
       items: p.items, monkeyIdols: p.monkeyIdols, mastery: p.mastery, clankArea: this.clankArea?.[p.id] ?? 0, inBag: this.bag?.[p.id] ?? 0,
       deckCount: p.deck.length, handCount: p.hand.length, discard: p.discard.map(cardView), playArea: p.playArea.map(cardView), trashedCount: p.trashed.length,
+      // deck contents are public knowledge but the order is secret: sent alphabetically
+      deck: [...p.deck].map(cardView).sort((x, y) => def(x).name.localeCompare(def(y).name)), trashed: p.trashed.map(cardView),
       hand: p.id === pid ? p.hand.map(cardView) : undefined,
       score: this.phase === 'playing' ? this.score(p, true).total : undefined,
       allCards: this.phase === 'ended' ? [...p.deck, ...p.hand, ...p.discard, ...p.playArea].map(cardView) : undefined,

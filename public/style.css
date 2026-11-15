@@ -169,6 +169,14 @@ g[data-mv]:hover .room, g[data-tp]:hover .room { stroke:#fff; }
 .modal-box h3 { display:flex; justify-content:space-between; align-items:center; gap:12px; }
 button.defer { font-size:11px; padding:5px 10px; background:transparent; border-color:#8c6a3c; color:var(--parch-ink); box-shadow:none; }
 button.resume { border-color:var(--purple); }
+button.piles { font-family:var(--body); font-size:12.5px; font-weight:normal; letter-spacing:0; padding:4px 10px; }
+.pl { cursor:pointer; }
+.modal-box.wide { width:min(980px, 100%); }
+.vsec { display:flex; flex-direction:column; gap:6px; }
+.vsec h4 { font-size:17px; color:var(--parch-ink); }
+.vsec .muted { color:var(--parch-muted); }
+#viewerBody { display:flex; flex-direction:column; gap:14px; }
+#viewerBody .cards.small .card { --w:104px; font-size:9.5px; }
 #options { display:flex; flex-direction:column; gap:8px; }
 .opt-row { display:flex; align-items:center; gap:12px; font-family:var(--caps); font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--parch-muted); }
 .opt-row span { width:52px; }

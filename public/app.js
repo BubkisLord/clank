@@ -166,11 +166,12 @@ function render() {
 function renderPlayers() {
   $('players').innerHTML = state.players.map((p) => {
     const st = p.status === 'in' ? room(p.room).name : p.status === 'escaped' ? 'Escaped the dungeon' : p.koRescued ? 'Knocked out · rescued' : 'Knocked out · lost';
-    const loot = [...p.artifacts.map((a) => `🏺${a}`), p.monkeyIdols ? `🐒${p.monkeyIdols}` : '', p.items.masterKey ? '🔑' : '', p.items.backpack ? '🎒' : '', ...p.items.crowns.map((c) => `👑${c}`), p.mastery ? '🏅' : ''].filter(Boolean).join(' ');
+    const secretIcons = p.secrets.map((sx) => ({ chalice: '🏆', dragon_egg: '🥚', treasure: '💰', greater_treasure: '💰' }[sx.id] || '🧪')).join('');
+    const loot = [...p.artifacts.map((a) => `🏺${a}`), p.monkeyIdols ? `🐒${p.monkeyIdols}` : '', p.items.masterKey ? '🔑' : '', p.items.backpack ? '🎒' : '', ...p.items.crowns.map((c) => `👑${c}`), p.mastery ? '🏅' : '', secretIcons].filter(Boolean).join(' ');
     const hp = Array.from({ length: 10 }, (_, i) => `<i class="${i < 10 - p.damage ? '' : 'off'}"></i>`).join('');
     const cubes = Array.from({ length: Math.min(p.clankArea, 30) }, () => `<i style="background:${COLOR[p.color]}"></i>`).join('');
     const title = `${p.name}: ${10 - p.damage}/10 health · ${p.clankArea} Clank in the area, ${p.inBag} in the bag, ${p.supply} in supply · deck ${p.deckCount}, hand ${p.handCount}, discard ${p.discard.length}${p.connected ? '' : ' · disconnected'}`;
-    return `<div class="pl ${p.id === state.currentPlayer ? 'current' : ''} ${p.status !== 'in' ? 'out' : ''}" title="${title}">
+    return `<div class="pl ${p.id === state.currentPlayer ? 'current' : ''} ${p.status !== 'in' ? 'out' : ''}" title="${title} — click to inspect their cards" data-inspect="${p.id}">
       <div class="av" style="background:${COLOR[p.color]}">${p.name[0].toUpperCase()}</div>
       <div style="min-width:0;flex:1">
         <div class="nm"><span>${p.name}${p.id === me ? ' ✦' : ''}${p.connected ? '' : ' ⚠'}</span><span class="g" title="Points if they made it out now">${p.score ?? 0} pts · ${p.gold}g</span></div>
@@ -181,6 +182,28 @@ function renderPlayers() {
       </div>
     </div>`;
   }).join('');
+  $('players').querySelectorAll('[data-inspect]').forEach((el) => { el.onclick = () => showCards(state.players.find((x) => x.id === el.dataset.inspect)); });
+}
+
+// ---------- card viewer (deck is alphabetical; discard in play order, newest first) ----------
+function groupCards(cards) {
+  const m = new Map();
+  for (const c of cards) { const d = cdef(c); const g = m.get(d.id) || { def: d, n: 0 }; g.n++; m.set(d.id, g); }
+  return [...m.values()].sort((x, y) => x.def.name.localeCompare(y.def.name));
+}
+function showCards(p) {
+  const sections = [
+    ['Deck', p.deck, `${p.deckCount} card${p.deckCount === 1 ? '' : 's'}, shown alphabetically — the draw order stays secret`, true],
+    ['Discard pile', [...p.discard].reverse(), `${p.discard.length} card${p.discard.length === 1 ? '' : 's'}, newest first`, false],
+    ['Play area', p.playArea, '', false],
+    ['Trashed', p.trashed, 'removed from the game', true],
+  ];
+  if (p.id === me) sections.splice(1, 0, ['Hand', p.hand || [], '', false]);
+  const pts = p.score != null ? ` · ${p.score} pts if they left now` : '';
+  $('viewerTitle').innerHTML = `<span>${p.name}'s cards${pts}</span><button id="viewerClose" class="defer">✕ Close</button>`;
+  $('viewerBody').innerHTML = sections.map(([title, cards, note, grouped]) => `<div class="vsec"><h4>${title} <span class="muted">${note}</span></h4><div class="cards small">${cards.length ? (grouped ? groupCards(cards).map((g) => cardHTML(g.def, { count: g.n > 1 ? g.n : undefined })).join('') : cards.map((c) => cardHTML(cdef(c))).join('')) : '<span class="muted">empty</span>'}</div></div>`).join('');
+  $('viewer').classList.remove('hidden');
+  $('viewerClose').onclick = () => $('viewer').classList.add('hidden');
 }
 
 function renderDragon() {
@@ -369,15 +392,16 @@ function renderMe() {
   $('playArea').innerHTML = p.playArea.map((c) => cardHTML(cdef(c))).join('') || '<span class="muted">nothing yet</span>';
 
   const toks = [];
-  for (const s of p.secrets) { const d = sdef(s.id); toks.push(`<div class="tok" title="${d.text}">${d.name}${d.use === 'held' && mine && !state.pending ? `<button data-use="${s.uid}">Use</button>` : ''}</div>`); }
+  for (const s of p.secrets) { const d = sdef(s.id); const val = d.points ? ` · ${d.points} pts` : d.gold ? ` · ${d.gold} gold` : ''; toks.push(`<div class="tok" title="${d.text}">${d.name}${val}${d.use === 'held' && mine && !state.pending ? `<button data-use="${s.uid}">Use</button>` : ''}</div>`); }
   for (const v of p.artifacts) toks.push(`<div class="tok">🏺 Artifact ${v}</div>`);
   if (p.monkeyIdols) toks.push(`<div class="tok">🐒 Monkey Idol ×${p.monkeyIdols} (5 pts each)</div>`);
   if (p.items.masterKey) toks.push(`<div class="tok">🔑 Master Key ×${p.items.masterKey}</div>`);
   if (p.items.backpack) toks.push(`<div class="tok">🎒 Backpack ×${p.items.backpack}</div>`);
   for (const c of p.items.crowns) toks.push(`<div class="tok">👑 Crown ${c}</div>`);
   if (p.mastery) toks.push(`<div class="tok">🏅 Mastery (20 pts)</div>`);
-  toks.push(`<div class="tok muted">deck ${p.deckCount} · discard ${p.discard.length} · trashed ${p.trashedCount}</div>`);
+  toks.push(`<button class="piles" id="viewPiles" title="See your deck (alphabetical), discard pile and trashed cards">📚 Deck ${p.deckCount} · Discard ${p.discard.length}${p.trashedCount ? ` · Trashed ${p.trashedCount}` : ''}</button>`);
   $('tokens').innerHTML = toks.join('');
+  $('viewPiles').onclick = () => showCards(p);
   $('tokens').querySelectorAll('[data-use]').forEach((b) => { b.onclick = () => act({ type: 'useSecret', uid: b.dataset.use }); });
 }
 

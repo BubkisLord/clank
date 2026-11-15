@@ -78,12 +78,24 @@ artifacts are taken with a button, as per the updated FAQ rule.
 ## Computer players
 
 The host can press **Add computer player** in the lobby to fill a seat with an AI thief
-(`server/game/ai.js`). It is a hand-written strategy rather than a trained neural network. It
-values cards by what they produce, routes to the artifact worth the most for the danger, and
-heads for the exit once it has loot, is hurt, or someone else has escaped. Each bot gets a
-random appetite for risk. Bots act about once every 0.85 seconds so you can watch them play.
-Set the `BOT_DELAY` environment variable, in milliseconds, to change that. They pause while
-no human is connected.
+(`server/game/ai.js`). It is a hand-written strategy rather than a trained neural network. Bots
+act about once every 0.85 seconds so you can watch them. Set the `BOT_DELAY` environment
+variable, in milliseconds, to change that. They pause while no human is connected.
+
+Each bot is dealt a play style, and a table gets a mix:
+
+| Style | Plays like |
+|---|---|
+| Reckless raider | Buys boots, grabs the first artifact worth 10+ and runs, ignores wounds |
+| Patient deck-builder | Stays near the entrance for a round or two buying cards, likes point cards |
+| Steady thief | Weighs artifact value against distance and danger |
+| Greedy delver | Walks deep for the biggest artifacts and buys a backpack |
+
+The lobby's **Bots** setting picks the difficulty for all of them. Medium is the baseline.
+Easy misjudges cards and wounds, sometimes skips good buys, and grabs the first artifact it
+finds. Hard detours past secrets, idols and markets, avoids artifacts a rival will reach first,
+and reaches slightly deeper. In bot-only simulations Hard wins about a third more often than
+Medium, and Easy rarely wins.
 
 ## Accuracy notes
 

@@ -199,14 +199,15 @@ function render() {
     $('waitCode').textContent = state.code;
     $('shareLink').textContent = `${location.origin}/?g=${state.code}`;
     const host = state.players[0].id === me;
-    $('waitPlayers').innerHTML = state.players.map((p, i) => `<li style="border-color:${COLOR[p.color]}"><span>${p.bot ? '🤖 ' : ''}${esc(p.name)}${i === 0 ? ' <em>host</em>' : ''}${p.id === me ? ' <em>you</em>' : ''}${p.bot ? ' <em>computer</em>' : ''}</span>${host && i > 0 ? `<button class="kick" data-kick="${p.id}" title="Remove ${esc(p.name)} from the game">${p.bot ? 'Remove' : 'Kick'}</button>` : ''}</li>`).join('')
+    $('waitPlayers').innerHTML = state.players.map((p, i) => `<li style="border-color:${COLOR[p.color]}"><span>${p.bot ? '🤖 ' : ''}${esc(p.name)}${i === 0 ? ' <em>host</em>' : ''}${p.id === me ? ' <em>you</em>' : ''}${p.bot ? ` <em>${esc(p.botStyle || 'computer')}</em>` : ''}</span>${host && i > 0 ? `<button class="kick" data-kick="${p.id}" title="Remove ${esc(p.name)} from the game">${p.bot ? 'Remove' : 'Kick'}</button>` : ''}</li>`).join('')
       + (host && state.players.length < 4 ? `<li class="addbot"><button id="addBot" title="Add a computer-controlled thief">🤖 Add computer player</button></li>` : '');
     if ($('addBot')) $('addBot').onclick = () => send({ type: 'addBot' });
     $('waitPlayers').querySelectorAll('[data-kick]').forEach((b) => { b.onclick = () => { if (state.players.find((x) => x.id === b.dataset.kick)?.bot) return send({ type: 'kick', playerId: b.dataset.kick }); if (confirm(`Remove ${b.title.replace('Remove ', '').replace(' from the game', '')} from the game?`)) send({ type: 'kick', playerId: b.dataset.kick }); }; });
     $('startBtn').disabled = !host;
     const o = state.options || {};
     $('options').innerHTML = `<div class="opt-row"><span>Map</span><div class="seg">${['random', 'classic'].map((m) => `<button data-opt="map" data-val="${m}" class="${o.map === m ? 'on' : ''}" ${host ? '' : 'disabled'}>${m === 'random' ? 'Random dungeon' : 'Classic map'}</button>`).join('')}</div></div>
-      <div class="opt-row"><span>Turns</span><div class="seg"><button data-opt="autoEnd" data-val="1" class="${o.autoEnd ? 'on' : ''}" ${host ? '' : 'disabled'}>Auto-end when idle</button><button data-opt="autoEnd" data-val="0" class="${o.autoEnd ? '' : 'on'}" ${host ? '' : 'disabled'}>Manual</button></div></div>`;
+      <div class="opt-row"><span>Turns</span><div class="seg"><button data-opt="autoEnd" data-val="1" class="${o.autoEnd ? 'on' : ''}" ${host ? '' : 'disabled'}>Auto-end when idle</button><button data-opt="autoEnd" data-val="0" class="${o.autoEnd ? '' : 'on'}" ${host ? '' : 'disabled'}>Manual</button></div></div>`
+      + (state.players.some((p) => p.bot) ? `<div class="opt-row"><span>Bots</span><div class="seg">${[['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']].map(([v, l]) => `<button data-opt="botLevel" data-val="${v}" class="${(o.botLevel || 'medium') === v ? 'on' : ''}" ${host ? '' : 'disabled'}>${l}</button>`).join('')}</div></div>` : '');
     $('options').querySelectorAll('[data-opt]').forEach((b) => { b.onclick = () => send({ type: 'option', key: b.dataset.opt, value: b.dataset.opt === 'autoEnd' ? b.dataset.val === '1' : b.dataset.val }); });
     return;
   }
@@ -231,7 +232,7 @@ function renderPlayers() {
     return `<div class="pl ${p.id === state.currentPlayer ? 'current' : ''} ${p.status !== 'in' ? 'out' : ''}" title="${title} — click to inspect their cards" data-inspect="${p.id}">
       <div class="av" style="background:${COLOR[p.color]}">${esc(p.name[0].toUpperCase())}</div>
       <div style="min-width:0;flex:1">
-        <div class="nm"><span>${p.bot ? '<span title="Computer player">🤖</span>' : ''}${esc(p.name)}${p.id === me ? ' ✦' : ''}${p.connected ? '' : ' ⚠'}</span><span class="g" title="Points if they made it out now">${p.score ?? 0} pts · ${p.gold}g</span></div>
+        <div class="nm"><span>${p.bot ? `<span title="Computer player · ${esc(p.botStyle || '')} · ${esc(state.options?.botLevel || 'medium')}">🤖</span>` : ''}${esc(p.name)}${p.id === me ? ' ✦' : ''}${p.connected ? '' : ' ⚠'}</span><span class="g" title="Points if they made it out now">${p.score ?? 0} pts · ${p.gold}g</span></div>
         <div class="loot">${loot}</div>
         <div class="hp" title="Health ${10 - p.damage}/10">${hp}</div>
         <div class="st">${st}${p.onCountdown ? ' · countdown' : ''}</div>
@@ -278,7 +279,7 @@ function showCards(p) {
   if (p.mastery) loot.push(`🏅 Mastery <b>20</b>`);
   const b = p.scoreBreakdown;
   const bd = b ? `<div class="breakdown">${[['Artifacts', b.artifacts], ['Secrets', b.secrets], ['Idols', b.monkeyIdols], ['Items', b.items], ['Gold', b.gold], ['Cards', b.cards + b.bonus], ['Mastery', b.mastery]].map(([k, v]) => `<span>${k} <b>${v}</b></span>`).join('')}</div>` : '';
-  $('viewerTitle').innerHTML = `<span class="vt"><i class="av" style="background:${COLOR[p.color]}">${esc(p.name[0].toUpperCase())}</i>${esc(p.name)}${p.id === me ? ' <em>(you)</em>' : ''}<small>${st}${p.onCountdown ? ' · on countdown' : ''}${p.connected ? '' : ' · disconnected'}</small></span><button id="viewerClose" class="defer">✕ Close</button>`;
+  $('viewerTitle').innerHTML = `<span class="vt"><i class="av" style="background:${COLOR[p.color]}">${esc(p.name[0].toUpperCase())}</i>${esc(p.name)}${p.id === me ? ' <em>(you)</em>' : ''}${p.bot ? ` <em>🤖 ${esc(p.botStyle || 'computer')} · ${esc(state.options?.botLevel || 'medium')}</em>` : ''}<small>${st}${p.onCountdown ? ' · on countdown' : ''}${p.connected ? '' : ' · disconnected'}</small></span><button id="viewerClose" class="defer">✕ Close</button>`;
   const backs = (n) => Array.from({ length: n }, () => '<div class="card back"><img src="assets/dragon.svg" alt=""></div>').join('');
   $('viewerBody').innerHTML = `<div class="pstats">${stats}</div>${bd}<div class="vsec"><h4>Loot</h4><div class="lootlist">${loot.length ? loot.map((x) => `<span>${x}</span>`).join('') : '<span class="muted">nothing yet</span>'}</div></div>`
     + sections.map(([title, cards, note, grouped]) => `<div class="vsec"><h4>${title} <span class="muted">${note}</span></h4><div class="cards small">${title === 'Hand' && !p.hand && p.handCount ? backs(p.handCount) : cards.length ? (grouped ? groupCards(cards).map((g) => cardHTML(g.def, { count: g.n > 1 ? g.n : undefined })).join('') : cards.map((c) => cardHTML(cdef(c))).join('')) : '<span class="muted">empty</span>'}</div></div>`).join('');

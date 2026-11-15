@@ -1,3 +1,4 @@
+import { makeBotProfile, STYLES, LEVELS } from './ai.js';
 import { uid, shuffle } from './util.js';
 import { def, makeCard, publicDef, buildDungeonDeck, buildStartingDeck, buildReserve, allPublicDefs, CARD_DEFS } from './cards/index.js';
 import { RAGE_TRACK, RAGE_START, HEALTH_MAX, CLANK_SUPPLY, DRAGON_CUBES, MASTERY_POINTS, MARKET_PRICE, ARTIFACTS, classicBoard, generateBoard, publicRules } from './board.js';
@@ -26,13 +27,14 @@ export class Game {
     this.attackSeq = 0;
     this.version = 0;
     this.createdAt = Date.now();
-    this.options = { map: 'random', autoEnd: true };
+    this.options = { map: 'random', autoEnd: true, botLevel: 'medium' };
   }
 
   setOption(key, value) {
     if (this.phase !== 'lobby') fail('Options can only be changed before the game starts');
     if (key === 'map' && ['random', 'classic'].includes(value)) this.options.map = value;
     else if (key === 'autoEnd') this.options.autoEnd = !!value;
+    else if (key === 'botLevel' && LEVELS[value]) this.options.botLevel = value;
     else fail('Unknown option');
   }
 
@@ -47,8 +49,8 @@ export class Game {
       damage: 0, supply: CLANK_SUPPLY, gold: 0, room: 'start', artifacts: [], secrets: [],
       items: { masterKey: 0, backpack: 0, crowns: [] }, monkeyIdols: 0, mastery: false,
       status: 'in', koRescued: false, onCountdown: false,
-      // bots get a random temperament: <1 plays it safe, >1 pushes deeper for bigger artifacts
-      bot: bot ? { risk: 0.75 + Math.random() * 0.6 } : null,
+      // bots get a play style (see ai.js); the table is dealt a mix
+      bot: bot ? makeBotProfile(this.players.filter((x) => x.bot).map((x) => x.bot.style)) : null,
     };
     this.players.push(p);
     this.log(`${p.name} joined`);
@@ -637,7 +639,7 @@ export class Game {
     const cardView = (c) => ({ uid: c.uid, id: c.id });
     const cur = this.phase === 'playing' ? this.currentPlayer() : null;
     const players = this.players.map((p) => ({
-      id: p.id, name: p.name, color: p.color, bot: !!p.bot, connected: p.connected, status: p.status, koRescued: p.koRescued, onCountdown: p.onCountdown,
+      id: p.id, name: p.name, color: p.color, bot: !!p.bot, botStyle: p.bot ? STYLES[p.bot.style]?.label : undefined, connected: p.connected, status: p.status, koRescued: p.koRescued, onCountdown: p.onCountdown,
       room: p.room, damage: p.damage, supply: p.supply, gold: p.gold, artifacts: p.artifacts, secrets: p.secrets.map((s) => ({ uid: s.uid, id: s.id })),
       items: p.items, monkeyIdols: p.monkeyIdols, mastery: p.mastery, clankArea: this.clankArea?.[p.id] ?? 0, inBag: this.bag?.[p.id] ?? 0,
       deckCount: p.deck.length, handCount: p.hand.length, discard: p.discard.map(cardView), playArea: p.playArea.map(cardView), trashedCount: p.trashed.length,

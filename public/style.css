@@ -359,7 +359,6 @@ table.score td:first-child, table.score th:first-child { text-align:left; font-f
 .pl .nm { align-items:baseline; min-width:0; }
 .pl .nm > span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
 .pl .nm .g { flex:none; }
-.pl .botic { font-size:12px; line-height:1; margin-right:3px; vertical-align:1px; }
 .pl .r2, .pl .r3 { display:flex; align-items:center; gap:6px; min-width:0; }
 .pl .r2 { margin:3px 0 2px; }
 .pl .hp { margin:0; flex:none; }
@@ -435,6 +434,5 @@ table.score td:first-child, table.score th:first-child { text-align:left; font-f
 #playArea > div:not(:last-child) > .card { margin-right:6px; } /* spacing lives inside the wrapper, so it shrinks away when cards stack */
 @media (min-width: 901px) { .played-zone { flex-shrink:30; } .hand-zone { flex:0 1 auto; } }
 @media (min-width: 901px) { .hand-zone { flex:1 1 auto; } .played-zone { max-width:36%; } }
-#waitPlayers .botic { margin-right:5px; }
 .botabout { margin:0 0 12px; padding:8px 12px; background:#fff8e6; border-left:4px solid #b99a66; border-radius:4px; font-size:14px; line-height:1.4; color:var(--parch-ink); }
 .botabout b { font-family:var(--caps); font-size:12px; letter-spacing:.5px; margin-right:4px; }

@@ -58,3 +58,33 @@ test('a table of bots is dealt a mix of play styles', () => {
   for (const s of styles) assert.ok(STYLES[s]);
   assert.ok(g.stateFor(g.players[0].id).players[1].botStyle);
 });
+
+test('bot pace deals styles from its pool and re-deals seated bots', () => {
+  const g = new Game('AI');
+  g.addPlayer('Host');
+  for (let i = 0; i < 3; i++) g.addPlayer(`Bot ${i}`, { bot: true });
+  g.setOption('botPace', 'patient');
+  assert.ok(g.players.filter((p) => p.bot).every((p) => ['builder', 'greedy'].includes(p.bot.style)));
+  g.setOption('botPace', 'reckless');
+  assert.ok(g.players.filter((p) => p.bot).every((p) => ['raider', 'balanced'].includes(p.bot.style)));
+  assert.throws(() => g.setOption('botPace', 'sideways'));
+});
+
+test('reckless bots finish games sooner than patient ones', () => {
+  const rounds = (pace) => {
+    let total = 0;
+    for (let i = 0; i < 16; i++) {
+      const g = new Game('AI');
+      g.setOption('botPace', pace);
+      for (let k = 0; k < 3; k++) g.addPlayer(`Bot ${k}`, { bot: true });
+      g.options.map = i % 2 ? 'classic' : 'random';
+      g.start();
+      let steps = 0;
+      while (g.phase === 'playing' && steps++ < 30000) { const a = g.pending ? g.playerById(g.pending.pid) : g.currentPlayer(); g.act(a.id, nextAction(g, a)); }
+      assert.equal(g.phase, 'ended');
+      total += g.turnNumber;
+    }
+    return total;
+  };
+  assert.ok(rounds('reckless') < rounds('patient'));
+});

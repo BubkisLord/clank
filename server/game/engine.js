@@ -1,4 +1,4 @@
-import { makeBotProfile, STYLES, LEVELS } from './ai.js';
+import { makeBotProfile, STYLES, LEVELS, PACES } from './ai.js';
 import { uid, shuffle } from './util.js';
 import { def, makeCard, publicDef, buildDungeonDeck, buildStartingDeck, buildReserve, allPublicDefs, CARD_DEFS } from './cards/index.js';
 import { RAGE_TRACK, RAGE_START, HEALTH_MAX, CLANK_SUPPLY, DRAGON_CUBES, MASTERY_POINTS, MARKET_PRICE, ARTIFACTS, classicBoard, generateBoard, publicRules } from './board.js';
@@ -27,7 +27,7 @@ export class Game {
     this.attackSeq = 0;
     this.version = 0;
     this.createdAt = Date.now();
-    this.options = { map: 'random', autoEnd: true, botLevel: 'medium' };
+    this.options = { map: 'random', autoEnd: true, botLevel: 'medium', botPace: 'mixed' };
   }
 
   setOption(key, value) {
@@ -35,6 +35,12 @@ export class Game {
     if (key === 'map' && ['random', 'classic'].includes(value)) this.options.map = value;
     else if (key === 'autoEnd') this.options.autoEnd = !!value;
     else if (key === 'botLevel' && LEVELS[value]) this.options.botLevel = value;
+    else if (key === 'botPace' && PACES[value]) {
+      this.options.botPace = value;
+      // re-deal the bots already seated so their styles fit the new pace
+      const dealt = [];
+      for (const p of this.players.filter((x) => x.bot)) { p.bot = makeBotProfile(dealt, value); dealt.push(p.bot.style); }
+    }
     else fail('Unknown option');
   }
 
@@ -50,7 +56,7 @@ export class Game {
       items: { masterKey: 0, backpack: 0, crowns: [] }, monkeyIdols: 0, mastery: false,
       status: 'in', koRescued: false, onCountdown: false,
       // bots get a play style (see ai.js); the table is dealt a mix
-      bot: bot ? makeBotProfile(this.players.filter((x) => x.bot).map((x) => x.bot.style)) : null,
+      bot: bot ? makeBotProfile(this.players.filter((x) => x.bot).map((x) => x.bot.style), this.options.botPace) : null,
     };
     this.players.push(p);
     this.log(`${p.name} joined`);

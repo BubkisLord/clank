@@ -199,15 +199,20 @@ function render() {
     $('waitCode').textContent = state.code;
     $('shareLink').textContent = `${location.origin}/?g=${state.code}`;
     const host = state.players[0].id === me;
-    $('waitPlayers').innerHTML = state.players.map((p, i) => `<li style="border-color:${COLOR[p.color]}"><span>${p.bot ? '[BOT] ' : ''}${esc(p.name)}${i === 0 ? ' <em>host</em>' : ''}${p.id === me ? ' <em>you</em>' : ''}${p.bot ? ` <em>${esc(p.botStyle || 'computer')}</em>` : ''}</span>${host && i > 0 ? `<button class="kick" data-kick="${p.id}" title="Remove ${esc(p.name)} from the game">${p.bot ? 'Remove' : 'Kick'}</button>` : ''}</li>`).join('')
+    $('waitPlayers').innerHTML = state.players.map((p, i) => `<li style="border-color:${COLOR[p.color]}"><span>${p.bot ? '<span class="botic" title="Computer player">🤖</span>' : ''}${esc(p.name)}${i === 0 ? ' <em>host</em>' : ''}${p.id === me ? ' <em>you</em>' : ''}${p.bot ? ` <em>${esc(p.botStyle || 'computer')}</em>` : ''}</span>${host && i > 0 ? `<button class="kick" data-kick="${p.id}" title="Remove ${esc(p.name)} from the game">${p.bot ? 'Remove' : 'Kick'}</button>` : ''}</li>`).join('')
       + (host && state.players.length < 4 ? `<li class="addbot"><button id="addBot" title="Add a computer-controlled player">Add a bot player</button></li>` : '');
     if ($('addBot')) $('addBot').onclick = () => send({ type: 'addBot' });
     $('waitPlayers').querySelectorAll('[data-kick]').forEach((b) => { b.onclick = () => { if (state.players.find((x) => x.id === b.dataset.kick)?.bot) return send({ type: 'kick', playerId: b.dataset.kick }); if (confirm(`Remove ${b.title.replace('Remove ', '').replace(' from the game', '')} from the game?`)) send({ type: 'kick', playerId: b.dataset.kick }); }; });
     $('startBtn').disabled = !host;
     const o = state.options || {};
-    $('options').innerHTML = `<div class="opt-row"><span>Map</span><div class="seg">${['random', 'classic'].map((m) => `<button data-opt="map" data-val="${m}" class="${o.map === m ? 'on' : ''}" ${host ? '' : 'disabled'}>${m === 'random' ? 'Random dungeon' : 'Classic map'}</button>`).join('')}</div></div>
-      <div class="opt-row"><span>Turns</span><div class="seg"><button data-opt="autoEnd" data-val="1" class="${o.autoEnd ? 'on' : ''}" ${host ? '' : 'disabled'}>Auto-end when idle</button><button data-opt="autoEnd" data-val="0" class="${o.autoEnd ? '' : 'on'}" ${host ? '' : 'disabled'}>Manual</button></div></div>`
-      + (state.players.some((p) => p.bot) ? `<div class="opt-row"><span>Bots</span><div class="seg">${[['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']].map(([v, l]) => `<button data-opt="botLevel" data-val="${v}" class="${(o.botLevel || 'medium') === v ? 'on' : ''}" ${host ? '' : 'disabled'}>${l}</button>`).join('')}</div></div>` : '');
+    const dis = host ? '' : 'disabled';
+    const seg = (key, cur, items) => `<div class="seg">${items.map(([v, l, tip]) => `<button data-opt="${key}" data-val="${v}" class="${cur === v ? 'on' : ''}" title="${tip}" ${dis}>${l}</button>`).join('')}</div>`;
+    $('options').innerHTML = `<span class="opt-l">Game</span>`
+      + seg('map', o.map, [['random', 'Random dungeon', 'A new dungeon layout every game'], ['classic', 'Classic map', 'The standard board']])
+      + seg('autoEnd', o.autoEnd ? '1' : '0', [['1', 'Auto-end', 'End your turn automatically once your hand is empty'], ['0', 'Manual', 'Press End turn yourself']])
+      + (state.players.some((p) => p.bot) ? `<span class="opt-l">Bots</span>`
+        + seg('botLevel', o.botLevel || 'medium', [['easy', 'Easy', 'Sloppy: misjudges cards, wounds and prompts'], ['medium', 'Medium', 'Solid, straightforward play'], ['hard', 'Hard', 'Plans detours and races rivals to artifacts']])
+        + seg('botPace', o.botPace || 'mixed', [['reckless', 'Reckless', 'Bots grab the nearest artifact and run: shorter games'], ['mixed', 'Mixed', 'A mix of fast and slow bots'], ['patient', 'Patient', 'Bots build their decks and delve deep: longer games']]) : '');
     $('options').querySelectorAll('[data-opt]').forEach((b) => { b.onclick = () => send({ type: 'option', key: b.dataset.opt, value: b.dataset.opt === 'autoEnd' ? b.dataset.val === '1' : b.dataset.val }); });
     return;
   }

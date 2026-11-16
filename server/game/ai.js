@@ -9,6 +9,7 @@
 // Two independent knobs shape a bot:
 //   style  (per bot, rolled when it joins): how it likes to play — see STYLES
 //   level  (game option botLevel): how well it plays — see LEVELS
+//   pace   (game option botPace): which styles are dealt and how fast they push — see PACES
 import { def, CARD_DEFS } from './cards/index.js';
 import { SECRET_DEFS } from './secrets.js';
 import { HEALTH_MAX, MARKET_PRICE } from './board.js';
@@ -39,18 +40,31 @@ export const LEVELS = {
     hard: { label: 'Hard', noise: 0, slip: 0, potions: true, careless: false, detour: true, rivals: true, tune: { haste: 0.7 } },
 };
 
+// Game length. reckless: only fast styles, pushed harder, so games end sooner;
+// patient: only slow styles that build a deck first, so games run longer.
+// styles: the pool bots are dealt from; haste: multiplier on the style's haste; build: extra build rounds;
+// grab: take any artifact at least this valuable on the way, instead of walking on to the planned one.
+export const PACES = {
+    reckless: { label: 'Reckless', styles: ['raider', 'balanced'], haste: 2, build: 0, grab: 8 },
+    mixed: { label: 'Mixed', styles: Object.keys(STYLES), haste: 1, build: 0 },
+    patient: { label: 'Patient', styles: ['builder', 'greedy'], haste: 0.6, build: 2 },
+};
+
 const between = ([a, b]) => a + Math.random() * (b - a);
 
-// The per-bot profile stored on the player. Styles are dealt so a table gets a mix.
-export function makeBotProfile(existingStyles = []) {
-    const all = Object.keys(STYLES);
+// The per-bot profile stored on the player. Styles are dealt from the pace's pool so a table gets a mix.
+export function makeBotProfile(existingStyles = [], pace = 'mixed') {
+    const P = PACES[pace] || PACES.mixed;
+    const all = P.styles;
     const fresh = all.filter((s) => !existingStyles.includes(s));
-    const style = (fresh.length ? fresh : all)[Math.floor(Math.random() * (fresh.length || all.length))];
+    const pool = fresh.length ? fresh : all;
+    const style = pool[Math.floor(Math.random() * pool.length)];
     const S = STYLES[style];
-    return { style, risk: between(S.risk), buildRounds: Math.round(between(S.buildRounds)) };
+    return { style, risk: between(S.risk), buildRounds: Math.round(between(S.buildRounds)) + P.build };
 }
 
 const styleOf = (p) => STYLES[p.bot?.style] || STYLES.balanced;
+const paceOf = (game) => PACES[game.options?.botPace] || PACES.mixed;
 const levelOf = (game, p) => LEVELS[p?.bot?.level || game.options?.botLevel] || LEVELS.medium;
 const jitter = (game, p) => (Math.random() - 0.5) * levelOf(game, p).noise;
 
@@ -166,7 +180,7 @@ function chooseTarget(game, p) {
     const here = routeCosts(game, p, p.room);
     const someoneOut = game.players.some((x) => x !== p && x.status !== 'in');
     const hurt = lvl.careless ? p.damage * 0.15 : p.damage * 0.5; // easy bots underrate their wounds
-    const haste = (S.haste || 1) * (lvl.tune?.haste || 1); // >1 prefers near artifacts and a quick exit
+    const haste = (S.haste || 1) * (lvl.tune?.haste || 1) * paceOf(game).haste; // >1 prefers near artifacts and a quick exit
     const turnCost = haste * (1 + game.rage * 0.5 + hurt + (someoneOut ? 8 : 0)) / (p.bot?.risk ?? 1);
     const homeAt = lvl.careless ? 8 : S.homeAt;
     const goHome = p.artifacts.length >= capacity || (p.artifacts.length && (p.damage >= homeAt || someoneOut || game.rage >= 5));
@@ -302,7 +316,7 @@ export function nextAction(game, p) {
     const target = chooseTarget(game, p);
 
     // 3. loot in this room
-    if (L.canTakeArtifact && (target?.room === p.room || (!p.artifacts.length && (p.damage >= 5 || lvl.careless || (S.grab && game.rooms[p.room].artifact >= S.grab))))) return { type: 'takeArtifact' };
+    if (L.canTakeArtifact && (target?.room === p.room || (!p.artifacts.length && (p.damage >= 5 || lvl.careless || ((S.grab || paceOf(game).grab) && game.rooms[p.room].artifact >= Math.min(S.grab || 99, paceOf(game).grab || 99)))))) return { type: 'takeArtifact' };
     if (L.canBuy.length) {
         const lockedArtifact = !p.items.masterKey && game.board.tunnels.some(([a, b, o = {}]) => o.locked && (game.rooms[a]?.artifact || game.rooms[b]?.artifact));
         if (L.canBuy.includes('masterKey') && lockedArtifact && !p.artifacts.length && p.damage < 5) return { type: 'buy', item: 'masterKey' };

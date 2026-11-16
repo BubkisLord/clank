@@ -179,11 +179,12 @@ button.piles { font-family:var(--body); font-size:12.5px; font-weight:normal; le
 .vsec .muted { color:var(--parch-muted); }
 #viewerBody { display:flex; flex-direction:column; gap:14px; }
 #viewerBody .cards.small .card { --w:104px; font-size:9.5px; }
-#options { display:flex; flex-direction:column; gap:8px; }
-.opt-row { display:flex; align-items:center; gap:12px; font-family:var(--caps); font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--parch-muted); }
-.opt-row span { width:52px; }
+#options { display:grid; grid-template-columns:auto minmax(0,1fr) minmax(0,1fr); align-items:center; gap:8px 12px; }
+.opt-l { font-family:var(--caps); font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--parch-muted); padding-right:6px; }
 .seg { display:flex; }
-.seg button { border-radius:0; font-size:11px; padding:6px 12px; }
+.seg button { flex:1 1 0; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+@media (max-width:620px) { #options { grid-template-columns:auto 1fr; } #options .seg:nth-of-type(2n) { grid-column:2; } }
+.seg button { border-radius:0; font-size:11px; padding:6px 8px; }
 .seg button:first-child { border-radius:6px 0 0 6px; } .seg button:last-child { border-radius:0 6px 6px 0; }
 .seg button.on { background:linear-gradient(#f0bd55, #c78a22); color:#2a1708; }
 .card.empty { background:rgba(255,255,255,.03); border:2px dashed #4d3521; box-shadow:none; }
@@ -431,3 +432,4 @@ table.score td:first-child, table.score th:first-child { text-align:left; font-f
 #playArea > div:not(:last-child) > .card { margin-right:6px; } /* spacing lives inside the wrapper, so it shrinks away when cards stack */
 @media (min-width: 901px) { .played-zone { flex-shrink:30; } .hand-zone { flex:0 1 auto; } }
 @media (min-width: 901px) { .hand-zone { flex:1 1 auto; } .played-zone { max-width:36%; } }
+#waitPlayers .botic { margin-right:5px; }

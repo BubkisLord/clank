@@ -541,7 +541,6 @@ html.dark { --card-border:#7a5f3c; }
 .pile.trash:hover:not(:disabled) { border-color:var(--gold); color:var(--text); }
 
 /* play-area pile: count badge when more than one card is down */
-.pcard em { position:absolute; right:-6px; bottom:-6px; font-style:normal; font-family:var(--caps); font-size:10px; font-weight:800; background:var(--gold); color:#2a1708; border-radius:999px; min-width:17px; height:17px; display:flex; align-items:center; justify-content:center; padding:0 4px; }
 @media (min-width: 901px) { .loot-zone { flex:0 1 270px; } }
 
 /* pile dialog: just the cards in one pile */

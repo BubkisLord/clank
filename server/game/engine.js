@@ -645,7 +645,7 @@ export class Game {
     const cardView = (c) => ({ uid: c.uid, id: c.id });
     const cur = this.phase === 'playing' ? this.currentPlayer() : null;
     const players = this.players.map((p) => ({
-      id: p.id, name: p.name, color: p.color, bot: !!p.bot, botStyle: p.bot ? STYLES[p.bot.style]?.label : undefined, connected: p.connected, status: p.status, koRescued: p.koRescued, onCountdown: p.onCountdown,
+      id: p.id, name: p.name, color: p.color, bot: !!p.bot, botStyle: p.bot ? STYLES[p.bot.style]?.label : undefined, botAbout: p.bot ? STYLES[p.bot.style]?.about : undefined, connected: p.connected, status: p.status, koRescued: p.koRescued, onCountdown: p.onCountdown,
       room: p.room, damage: p.damage, supply: p.supply, gold: p.gold, artifacts: p.artifacts, secrets: p.secrets.map((s) => ({ uid: s.uid, id: s.id })),
       items: p.items, monkeyIdols: p.monkeyIdols, mastery: p.mastery, clankArea: this.clankArea?.[p.id] ?? 0, inBag: this.bag?.[p.id] ?? 0,
       deckCount: p.deck.length, handCount: p.hand.length, discard: p.discard.map(cardView), playArea: p.playArea.map(cardView), trashedCount: p.trashed.length,

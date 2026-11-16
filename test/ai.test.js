@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Game } from '../server/game/engine.js';
-import { nextAction, STYLES, LEVELS } from '../server/game/ai.js';
+import { nextAction, STYLES, LEVELS, PACES } from '../server/game/ai.js';
 
 function botGame(n, map, level = 'medium') {
   const g = new Game('AI');
@@ -59,14 +59,18 @@ test('a table of bots is dealt a mix of play styles', () => {
   assert.ok(g.stateFor(g.players[0].id).players[1].botStyle);
 });
 
+test('every bot style has a player-sheet description', () => {
+  for (const S of Object.values(STYLES)) assert.ok(S.about && S.about.length > 20);
+});
+
 test('bot pace deals styles from its pool and re-deals seated bots', () => {
   const g = new Game('AI');
   g.addPlayer('Host');
   for (let i = 0; i < 3; i++) g.addPlayer(`Bot ${i}`, { bot: true });
   g.setOption('botPace', 'patient');
-  assert.ok(g.players.filter((p) => p.bot).every((p) => ['builder', 'greedy'].includes(p.bot.style)));
+  assert.ok(g.players.filter((p) => p.bot).every((p) => PACES.patient.styles.includes(p.bot.style)));
   g.setOption('botPace', 'reckless');
-  assert.ok(g.players.filter((p) => p.bot).every((p) => ['raider', 'balanced'].includes(p.bot.style)));
+  assert.ok(g.players.filter((p) => p.bot).every((p) => PACES.reckless.styles.includes(p.bot.style)));
   assert.throws(() => g.setOption('botPace', 'sideways'));
 });
 

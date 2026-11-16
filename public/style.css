@@ -436,3 +436,5 @@ table.score td:first-child, table.score th:first-child { text-align:left; font-f
 @media (min-width: 901px) { .played-zone { flex-shrink:30; } .hand-zone { flex:0 1 auto; } }
 @media (min-width: 901px) { .hand-zone { flex:1 1 auto; } .played-zone { max-width:36%; } }
 #waitPlayers .botic { margin-right:5px; }
+.botabout { margin:0 0 12px; padding:8px 12px; background:#fff8e6; border-left:4px solid #b99a66; border-radius:4px; font-size:14px; line-height:1.4; color:var(--parch-ink); }
+.botabout b { font-family:var(--caps); font-size:12px; letter-spacing:.5px; margin-right:4px; }

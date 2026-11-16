@@ -22,11 +22,12 @@ export const BOT_FIRST_NAMES = ['Sir', 'Old', 'Lady', 'Brother', 'Mags', 'Wren',
 // cardW: how much it wants to buy cards; bootW: how much it values movement; points: extra love for point cards
 // buildRounds: rounds spent near the entrance building a deck before delving
 // homeAt: damage at which it heads for the exit if it holds an artifact
+// about: plain description shown on the player sheet
 export const STYLES = {
-    raider: { label: 'Reckless raider', grab: 10, haste: 1.6, risk: [0.9, 1.2], cardW: 0.6, bootW: 1.9, clankW: 0.5, buildRounds: [0, 0], homeAt: 8 },
-    builder: { label: 'Patient deck-builder', haste: 0.8, risk: [0.9, 1.2], cardW: 1.4, bootW: 1, clankW: 1, points: 0.4, buildRounds: [1, 2], homeAt: 6 },
-    balanced: { label: 'Steady thief', haste: 1, risk: [0.75, 1.35], cardW: 1, bootW: 1.2, clankW: 1, buildRounds: [0, 0], homeAt: 6 },
-    greedy: { label: 'Greedy delver', haste: 0.55, risk: [0.9, 1.2], cardW: 0.9, bootW: 1.4, clankW: 0.8, buildRounds: [0, 1], homeAt: 7, backpack: true },
+    raider: { label: 'Reckless raider', about: 'Grabs the nearest decent artifact and sprints for the exit. Prefers movement to buying cards and shrugs off Clank!, so it is usually first out, with a smaller haul.', grab: 10, haste: 1.6, risk: [0.9, 1.2], cardW: 0.6, bootW: 1.9, clankW: 0.5, buildRounds: [0, 0], homeAt: 8 },
+    builder: { label: 'Patient deck-builder', about: 'Spends the first rounds near the entrance buying cards, especially ones worth points, then delves with a stronger deck. Slow to start, dangerous late.', haste: 0.8, risk: [0.9, 1.2], cardW: 1.4, bootW: 1, clankW: 1, points: 0.4, buildRounds: [1, 2], homeAt: 6 },
+    balanced: { label: 'Steady thief', about: 'Weighs each artifact against how far and how dangerous it is to reach. No strong habits, just sensible choices.', haste: 1, risk: [0.75, 1.35], cardW: 1, bootW: 1.2, clankW: 1, buildRounds: [0, 0], homeAt: 6 },
+    greedy: { label: 'Greedy delver', about: 'Goes deep for the biggest artifacts and buys a backpack so it can carry two out. Stays down longer when hurt, so it comes back rich or not at all.', haste: 0.55, risk: [0.9, 1.2], cardW: 0.9, bootW: 1.4, clankW: 0.8, buildRounds: [0, 1], homeAt: 7, backpack: true },
 };
 
 // noise: random error added to every judgement; slip: chance of skipping a good buy or fight;

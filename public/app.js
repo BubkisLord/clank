@@ -143,6 +143,22 @@ const myPlayer = () => state.players.find((p) => p.id === me);
 const isMyTurn = () => state.currentPlayer === me && !!state.turn;
 function hearts(dmg) { return '♥'.repeat(10 - dmg) + '<span style="opacity:.3">♥</span>'.repeat(dmg); }
 
+// Card text with its keywords coloured: "+2 Skill", "Draw a card", "+1 Clank!" and so on.
+const KEYWORDS = [
+  ['skill', 'Skill'], ['swords', 'Swords?'], ['boots', 'Boots?'], ['gold', 'Gold'], ['clank', 'Clank!?'],
+  ['draw', String.raw`[Dd]raws?(?:\s+(?:a|one|two|three|\d+)\s+cards?)?`], ['heal', String.raw`[Hh]eal(?:\s+\d+)?`], ['teleport', 'Teleport'], ['trash', 'Trash'],
+  ['danger', 'Dragon Attack|Danger'], ['points', 'points?|pts'],
+];
+const KW_RE = new RegExp(String.raw`([+−-]?\d+\s+)?\b(${KEYWORDS.map(([, re]) => `(${re})`).join('|')})(?!\w)`, 'g');
+function richText(text) {
+  return esc(text)
+    .replace(KW_RE, (m, num, word, ...groups) => {
+      const i = groups.slice(0, KEYWORDS.length).findIndex((g) => g !== undefined);
+      return `<b class="kw kw-${KEYWORDS[i][0]}">${m}</b>`;
+    })
+    .replace(/\b(Defeat|Arrive|Acquire):/g, '<b class="kw-when">$1:</b>');
+}
+
 function cardHTML(def, { cost, count, buttons = '', playable = false, small = false } = {}) {
   const kind = def.reserve ? 'reserve ' + def.kind : def.kind;
   const c = cost ?? def.cost;
@@ -152,10 +168,9 @@ function cardHTML(def, { cost, count, buttons = '', playable = false, small = fa
   const art = artFor(def);
   const subtype = def.kind === 'monster' ? 'Monster' : def.kind === 'device' ? 'Device' : def.tags.includes('gem') ? 'Gem' : def.tags.includes('companion') ? 'Companion' : def.tags.includes('equipment') ? 'Item' : '';
   return `<div class="card ${kind} ${art} ${playable ? 'playable' : ''}" title="${def.text}">
-    <div class="art" style="background-image:url(assets/cards/card-${art}.jpg)"></div>
     <div class="banner"><span>${def.name}</span><span>${count != null ? `<span class="count">×${count}</span>` : ''}</span></div>
     ${subtype ? `<div class="subtype">${subtype}</div>` : ''}
-    <div class="body">${def.text}</div>
+    <div class="body">${richText(def.text)}</div>
     ${buttons ? `<div class="act">${buttons}</div>` : ''}
     <div class="foot"><span class="pts">${def.points ? def.points + ' pts' : ''}</span><span class="fr">${badges}${costLabel ? `<span class="cost">${costLabel}</span>` : ''}</span></div>
   </div>`;

@@ -143,9 +143,6 @@ g[data-mv]:hover .room, g[data-tp]:hover .room { stroke:#fff; }
 .card { --w:150px; width:var(--w); aspect-ratio:150/208; background:linear-gradient(#f3e8cf, #e3d2ab); color:var(--parch-ink); border-radius:9px; display:flex; flex-direction:column; overflow:hidden; position:relative; font-size:12.5px; line-height:1.3;
   border:2px solid #2a1c12; box-shadow:inset 0 0 0 2px #cdb98c, 0 3px 8px rgba(0,0,0,.45); transition:transform .15s, box-shadow .15s; }
 .cards.small .card { --w:96px; font-size:9px; }
-.card .art { height:38%; background-size:cover; background-position:center; position:relative; border-bottom:2px solid #2a1c12; }
-.card .art::after { content:""; position:absolute; inset:0; background:linear-gradient(rgba(0,0,0,0) 55%, rgba(30,18,10,.55)); }
-.cards.small .card .art { height:32%; }
 .card .banner { position:absolute; left:0; right:0; top:0; padding:4px 7px; color:#fff; font-family:var(--display); font-weight:700; font-size:14px; letter-spacing:.3px; display:flex; justify-content:space-between; align-items:center; text-shadow:0 1px 2px rgba(0,0,0,.8); background:linear-gradient(rgba(0,0,0,.72), rgba(0,0,0,.25)); border-bottom:1px solid rgba(255,255,255,.12); }
 .cards.small .card .banner { font-size:10px; padding:2px 5px; }
 .card.companion .banner { box-shadow:inset 4px 0 0 var(--blue); }
@@ -459,7 +456,6 @@ html.dark {
   --stone-1:#2c2633; --stone-2:#1f1a26; --stone-in:#342c3d; --stone-in-2:#3d3447; --stone-line:#4f4459; --stone-edge:#0e0b12; --stone-gold:#e9b84f;
 }
 html.dark .card { background:linear-gradient(var(--stone-1), var(--stone-2)); border-color:var(--stone-edge); box-shadow:inset 0 0 0 2px var(--stone-line), 0 3px 8px rgba(0,0,0,.55); }
-html.dark .card .art { border-bottom-color:var(--stone-edge); }
 html.dark .card.playable { border-color:var(--gold); box-shadow:inset 0 0 0 2px var(--stone-line), 0 0 0 2px var(--gold), 0 6px 16px rgba(0,0,0,.6); }
 html.dark .card.playable:hover { box-shadow:inset 0 0 0 2px var(--stone-line), 0 0 0 2px var(--gold), 0 14px 24px rgba(0,0,0,.7); }
 html.dark .modal-box .card { box-shadow:inset 0 0 0 2px var(--stone-line), 0 6px 16px rgba(0,0,0,.5); }
@@ -491,3 +487,22 @@ html.dark .pl .hp i.off { background:var(--stone-line); opacity:.7; }
 .theme-btn { flex:none; padding:5px 9px; font-size:15px; line-height:1; }
 #lobby .theme-btn, #waiting .theme-btn { position:fixed; top:14px; right:14px; z-index:5; }
 @media (max-width: 900px) { #topbar .theme-btn { justify-self:end; } }
+
+/* ---------- text-only cards: a coloured title bar by card type, and coloured keywords ---------- */
+.card .banner { position:static; flex:none; padding:6px 8px; background:linear-gradient(#5b4636, #3e2e22); border-bottom:2px solid rgba(0,0,0,.35); box-shadow:none; text-shadow:0 1px 1px rgba(0,0,0,.6); }
+.cards.small .card .banner { padding:3px 5px; }
+.card.companion .banner { background:linear-gradient(#3b78bd, #275791); box-shadow:none; }
+.card.device .banner { background:linear-gradient(#7d4fae, #583183); box-shadow:none; }
+.card.monster .banner { background:linear-gradient(#b8392f, #85241d); box-shadow:none; }
+.card.gem .banner { background:linear-gradient(#22968a, #156b62); box-shadow:none; }
+.card.reserve .banner { background:linear-gradient(#b0802a, #7d5814); box-shadow:none; }
+.card .body { font-size:1.05em; }
+
+:root { --kw-skill:#2563a8; --kw-swords:#b0302a; --kw-boots:#8a5512; --kw-gold:#a37200; --kw-clank:#c4471f; --kw-draw:#6b3fa0; --kw-heal:#2f7d47; --kw-teleport:#1d7a8c; --kw-trash:#6b6157; --kw-danger:#9b1c1c; --kw-points:#7a5200; }
+html.dark { --kw-skill:#7ab8f5; --kw-swords:#ff7d70; --kw-boots:#e8aa5c; --kw-gold:#f3c552; --kw-clank:#ff9466; --kw-draw:#c7a2f2; --kw-heal:#72d698; --kw-teleport:#62d4e2; --kw-trash:#b6ab9e; --kw-danger:#ff6464; --kw-points:#f3c552; }
+.kw { font-weight:700; }
+.kw-skill { color:var(--kw-skill); } .kw-swords { color:var(--kw-swords); } .kw-boots { color:var(--kw-boots); }
+.kw-gold { color:var(--kw-gold); } .kw-clank { color:var(--kw-clank); } .kw-draw { color:var(--kw-draw); }
+.kw-heal { color:var(--kw-heal); } .kw-teleport { color:var(--kw-teleport); } .kw-trash { color:var(--kw-trash); }
+.kw-danger { color:var(--kw-danger); } .kw-points { color:var(--kw-points); }
+.kw-when { font-family:var(--caps); font-size:.9em; letter-spacing:.3px; }

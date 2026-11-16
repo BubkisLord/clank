@@ -52,7 +52,9 @@ function connect() {
     } else if (msg.type === 'state') {
       state = msg.state;
       me = state.me;
-      render();
+      const wait = holdUntil - Date.now();
+      clearTimeout(holdTimer);
+      if (wait > 0) holdTimer = setTimeout(render, wait); else render();
     } else if (msg.type === 'kicked') {
       sessionStorage.removeItem('clank:' + msg.code);
       localStorage.removeItem('clank:' + msg.code);
@@ -74,6 +76,9 @@ function savedSeats(code) {
 }
 function send(m) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); }
 function act(action) { send({ type: 'action', action }); }
+// while an animation is running, incoming updates wait until it finishes
+let holdUntil = 0, holdTimer = null;
+const holdFor = (ms) => { holdUntil = Math.max(holdUntil, Date.now() + ms); };
 
 let toastTimer;
 function toast(t, kind = '') { const el = $('toast'); el.textContent = t; el.className = kind; clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.add('hidden'), 3000); }
@@ -486,6 +491,7 @@ function flyToDiscard(el) {
   const target = $('pileDiscard');
   if (!target || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const { g, r } = ghost(el), t = target.getBoundingClientRect();
+  holdFor(650);
   const dx = t.left + t.width / 2 - (r.left + r.width / 2), dy = t.top + t.height / 2 - (r.top + r.height / 2), sc = t.width / r.width;
   g.animate([
     { transform: 'none', offset: 0 },
@@ -493,9 +499,33 @@ function flyToDiscard(el) {
     { transform: `translate(${dx}px, ${dy}px) scale(${sc}) rotate(8deg)`, opacity: 0.9, offset: 1 },
   ], { duration: 650, easing: 'cubic-bezier(.5,0,.3,1)' }).onfinish = () => {
     g.remove();
-    $('pileDiscard')?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.12)' }, { transform: 'scale(1)' }], { duration: 260, easing: 'ease-out' });
+    setTimeout(() => $('pileDiscard')?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.12)' }, { transform: 'scale(1)' }], { duration: 260, easing: 'ease-out' }), 30);
   };
 }
+// reshuffle: a few cards lift off the discard pile, flip face down and drop onto the deck, which then riffles
+function reshuffleFx() {
+  const from = $('pileDiscard')?.getBoundingClientRect(), to = $('pileDeck')?.getBoundingClientRect();
+  if (!from || !to || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  holdFor(900);
+  const dx = to.left - from.left, dy = to.top - from.top;
+  for (let i = 0; i < 5; i++) {
+    const g = document.createElement('span');
+    g.className = 'pcard back';
+    g.innerHTML = '<img src="assets/dragon.svg" alt="">';
+    Object.assign(g.style, { position: 'fixed', left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px`, zIndex: 80, pointerEvents: 'none' });
+    document.body.append(g);
+    g.animate([
+      { transform: 'translate(0,0) rotateY(180deg)', opacity: 0 },
+      { transform: 'translate(0,-22px) rotateY(90deg)', opacity: 1, offset: 0.3 },
+      { transform: `translate(${dx}px, ${dy - 10}px) rotateY(0deg) rotate(${(i - 2) * 6}deg)`, offset: 0.8 },
+      { transform: `translate(${dx}px, ${dy}px)`, opacity: 1 },
+    ], { duration: 620, delay: i * 70, easing: 'cubic-bezier(.4,0,.3,1)', fill: 'backwards' }).onfinish = () => g.remove();
+  }
+  setTimeout(() => $('pileDeck')?.querySelector('.pcard')?.animate([
+    { transform: 'none' }, { transform: 'translateX(-4px) rotate(-4deg)' }, { transform: 'translateX(4px) rotate(4deg)' }, { transform: 'translateX(-2px) rotate(-2deg)' }, { transform: 'none' },
+  ], { duration: 360, easing: 'ease-in-out' }), 620 + 4 * 70);
+}
+
 // fights: a red flash and the card drops away; devices: a purple flare
 function cardFx(el, kind) {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -532,15 +562,21 @@ function animateNew(container, key) {
   fresh.forEach((el, i) => { el.classList.add(key === 'hand' ? 'deal' : 'slam'); el.style.animationDelay = `${i * 70}ms`; });
   seenUids[key] = new Set([...container.querySelectorAll('[data-uid]')].map((el) => el.dataset.uid));
 }
-let viewOwn = false, lastCurrent = null;
+let viewOwn = false, lastCurrent = null, lingerUntil = 0;
+const lastShuffles = {};
 function renderMe() {
   const p = myPlayer();
   const t = state.turn;
   const mine = isMyTurn();
   const cur = state.players.find((x) => x.id === state.currentPlayer);
-  if (state.currentPlayer !== lastCurrent) { viewOwn = false; lastCurrent = state.currentPlayer; }
+  if (state.currentPlayer !== lastCurrent) {
+    // your turn just ended: keep your own cards on screen briefly (new hand, any reshuffle) before following the next player
+    if (lastCurrent === me && state.phase === 'playing') { lingerUntil = Date.now() + 1600; setTimeout(() => { if (state) render(); }, 1650); }
+    viewOwn = false; lastCurrent = state.currentPlayer;
+  }
+  const lingering = Date.now() < lingerUntil;
   // not your turn: spectate whoever is playing (toggle back to your own hand any time)
-  const watching = !mine && state.phase === 'playing' && cur && cur.id !== me && !viewOwn;
+  const watching = !mine && state.phase === 'playing' && cur && cur.id !== me && !viewOwn && !lingering;
   const v = watching ? cur : p;
   let status;
   if (watching) status = `Watching ${cur.name}${state.pending ? ` — deciding: ${state.pending.title}` : ''}`;
@@ -614,6 +650,9 @@ function renderMe() {
   $('pileDeck').onclick = () => showCards(v, 'Deck');
   $('pileDiscard').onclick = () => showCards(v, 'Discard pile');
   if ($('pileTrash')) $('pileTrash').onclick = () => showCards(v, 'Trashed');
+  // the discard pile was shuffled into the deck since we last looked: animate it
+  if (lastShuffles[v.id] !== undefined && v.shuffles > lastShuffles[v.id]) reshuffleFx();
+  for (const x of state.players) lastShuffles[x.id] = x.shuffles;
   $('tokens').querySelectorAll('[data-use]').forEach((b) => { b.onclick = () => act({ type: 'useSecret', uid: b.dataset.use }); });
 }
 function renderPrompt() {

@@ -200,7 +200,7 @@ function render() {
     $('shareLink').textContent = `${location.origin}/?g=${state.code}`;
     const host = state.players[0].id === me;
     $('waitPlayers').innerHTML = state.players.map((p, i) => `<li style="border-color:${COLOR[p.color]}"><span>${p.bot ? '<span class="botic" title="Computer player">🤖</span>' : ''}${esc(p.name)}${i === 0 ? ' <em>host</em>' : ''}${p.id === me ? ' <em>you</em>' : ''}${p.bot ? ` <em>${esc(p.botStyle || 'computer')}</em>` : ''}</span>${host && i > 0 ? `<button class="kick" data-kick="${p.id}" title="Remove ${esc(p.name)} from the game">${p.bot ? 'Remove' : 'Kick'}</button>` : ''}</li>`).join('')
-      + (host && state.players.length < 4 ? `<li class="addbot"><button id="addBot" title="Add a computer-controlled player">Add a bot player</button></li>` : '');
+      + (host && state.players.length < 4 ? `<li class="addbot"><button id="addBot" title="Add a computer-controlled player">＋ Add a bot player</button></li>` : '');
     if ($('addBot')) $('addBot').onclick = () => send({ type: 'addBot' });
     $('waitPlayers').querySelectorAll('[data-kick]').forEach((b) => { b.onclick = () => { if (state.players.find((x) => x.id === b.dataset.kick)?.bot) return send({ type: 'kick', playerId: b.dataset.kick }); if (confirm(`Remove ${b.title.replace('Remove ', '').replace(' from the game', '')} from the game?`)) send({ type: 'kick', playerId: b.dataset.kick }); }; });
     $('startBtn').disabled = !host;

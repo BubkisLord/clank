@@ -651,6 +651,7 @@ function renderMe() {
   const who = watching ? `${esc(cur.name)}'s` : 'Your';
   document.querySelector('.hand-zone h4').innerHTML = `${who} hand`;
   document.querySelector('.loot-zone h4').innerHTML = `${who} loot`;
+  document.querySelector('.pile-zone h4').innerHTML = `${who} cards`;
   // switching between your hand and someone else's should deal the new hand in
   if ($('hand').dataset.viewing !== v.id) { seenUids.hand = new Set(); seenUids.playArea = new Set(); $('hand').dataset.viewing = v.id; }
   const hand = v.hand || [];
@@ -658,14 +659,20 @@ function renderMe() {
     || `<span class="muted">${mine ? 'All cards played — spend your resources, then end your turn.' : watching ? `${esc(cur.name)} has played every card.` : 'Waiting for your next hand.'}</span>`;
   if (mine) $('hand').querySelectorAll('[data-play]').forEach((d) => { d.onclick = () => { if (state.pending) return; flyTo(d.querySelector('.card'), 'pilePlay', 420); act({ type: 'play', uid: d.dataset.play }); }; });
   animateNew($('hand'), 'hand');
-  const toks = [];
-  for (const s of v.secrets) { const d = sdef(s.id); const val = d.points ? ` · ${d.points} pts` : d.gold ? ` · ${d.gold} gold` : ''; toks.push(`<div class="tok" title="${d.text}">${d.name}${val}${d.use === 'held' && mine && !state.pending ? `<button data-use="${s.uid}">Use</button>` : ''}</div>`); }
-  for (const x of v.artifacts) toks.push(`<div class="tok">🏺 Artifact ${x}</div>`);
-  if (v.monkeyIdols) toks.push(`<div class="tok">🐒 Monkey Idol ×${v.monkeyIdols} (5 pts each)</div>`);
-  if (v.items.masterKey) toks.push(`<div class="tok">🔑 Master Key ×${v.items.masterKey}</div>`);
-  if (v.items.backpack) toks.push(`<div class="tok">🎒 Backpack ×${v.items.backpack}</div>`);
-  for (const c of v.items.crowns) toks.push(`<div class="tok">👑 Crown ${c}</div>`);
-  if (v.mastery) toks.push(`<div class="tok">🏅 Mastery (20 pts)</div>`);
+  // loot: one row per thing held, with its points, then gold, card points and the total
+  const rows = [];
+  const row = (name, pts, extra = '', title = '') => rows.push(`<tr${title ? ` title="${esc(title)}"` : ''}><td>${name}${extra}</td><td>${pts}</td></tr>`);
+  for (const x of v.artifacts) row('Artifact', x);
+  for (const s of v.secrets) { const d = sdef(s.id); row(esc(d.name), d.points || (d.gold ? `${d.gold}<small>g</small>` : '—'), d.use === 'held' && mine && !state.pending ? ` <button data-use="${s.uid}">Use</button>` : '', d.text); }
+  if (v.monkeyIdols) row(`Monkey Idol <small>×${v.monkeyIdols}</small>`, v.monkeyIdols * 5);
+  if (v.items.masterKey) row(`Master Key${v.items.masterKey > 1 ? ` <small>×${v.items.masterKey}</small>` : ''}`, v.items.masterKey * 5);
+  if (v.items.backpack) row(`Backpack${v.items.backpack > 1 ? ` <small>×${v.items.backpack}</small>` : ''}`, v.items.backpack * 5);
+  for (const c of v.items.crowns) row('Crown', c);
+  if (v.mastery) row('Mastery', 20);
+  const b = v.scoreBreakdown;
+  const extras = b ? `<tr class="ls"><td>Gold</td><td>${v.gold}</td></tr><tr class="ls"><td>Card points</td><td>${b.cards + b.bonus}</td></tr>` : '';
+  const total = v.score != null ? `<tfoot><tr><td>Total <small>if out now</small></td><td>${v.score}</td></tr></tfoot>` : '';
+  $('tokens').innerHTML = `<table class="lootsheet"><tbody>${rows.join('') || '<tr class="none"><td colspan="2">No loot yet</td></tr>'}${extras}</tbody>${total}</table>`;
   const top = v.discard.length ? cdef(v.discard[v.discard.length - 1]) : null;
   const lastPlayed = v.playArea.length ? cdef(v.playArea[v.playArea.length - 1]) : null;
   const faceCls = (d) => `face ${d.reserve ? 'reserve' : d.kind}${d.tags.includes('gem') ? ' gem' : ''}`;
@@ -675,7 +682,7 @@ function renderMe() {
     <button class="pile" id="pileDiscard" title="Discard pile: ${plural(v.discard.length, 'card')}. Click to see them (newest first)."><span class="pcard ${top ? `face ${top.reserve ? 'reserve' : top.kind}${top.tags.includes('gem') ? ' gem' : ''}` : 'empty'}">${top ? `<i>${esc(top.name)}</i>` : ''}</span><span class="pl-l">Discard <b>${v.discard.length}</b></span></button>
     ${v.trashedCount ? `<button class="pile trash" id="pileTrash" title="${plural(v.trashedCount, 'card')} trashed (removed from the game). Click to see them."><span>Trashed <b>${v.trashedCount}</b></span></button>` : ''}
   </div>`;
-  $('tokens').innerHTML = piles + toks.join('');
+  $('piles').innerHTML = piles;
   $('pilePlay').onclick = () => showPile(v, 'played');
   $('pileDeck').onclick = () => showPile(v, 'deck');
   $('pileDiscard').onclick = () => showPile(v, 'discard');

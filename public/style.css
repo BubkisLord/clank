@@ -540,8 +540,13 @@ html.dark { --card-border:#7a5f3c; }
 .pile.trash, .pile.trash:hover:not(:disabled) { height:64px; justify-content:center; padding:4px 3px; border:1px solid var(--card-border); border-radius:4px; background:rgba(0,0,0,.25); writing-mode:vertical-rl; font-size:11px; }
 .pile.trash:hover:not(:disabled) { border-color:var(--gold); color:var(--text); }
 
-/* play-area pile: count badge when more than one card is down */
-@media (min-width: 901px) { .loot-zone { flex:0 1 270px; } }
+/* cards column (play area, deck, discard, trashed) sits between the hand and the loot */
+.pile-zone { flex:none; }
+.pile-zone .piles { margin:0; width:auto; }
+@media (min-width: 901px) {
+  .loot-zone { flex:0 1 230px; border-left:1px solid rgba(164,135,90,.35); padding-left:16px; }
+  .pile-zone { border-left:1px solid rgba(164,135,90,.35); padding-left:16px; }
+}
 
 /* pile dialog: just the cards in one pile */
 .pilebox { width:min(860px, 100%); }
@@ -549,3 +554,15 @@ html.dark { --card-border:#7a5f3c; }
 .pilebox h3 small { font-family:var(--body); font-size:13px; font-weight:normal; color:var(--parch-muted); margin-left:8px; }
 #pileBody .cards { gap:10px; }
 #pileBody .card { --w:128px; font-size:11px; }
+
+/* ---------- loot: a points sheet, one row per thing held ---------- */
+.lootsheet { width:100%; border-collapse:collapse; font-size:13px; }
+.lootsheet td { padding:3px 2px; border-bottom:1px dotted var(--card-border); vertical-align:middle; }
+.lootsheet td:last-child { text-align:right; font-family:var(--caps); font-weight:700; color:var(--text); white-space:nowrap; padding-left:10px; width:1%; }
+.lootsheet td:first-child { color:var(--text); }
+.lootsheet small { color:var(--muted); font-size:11px; }
+.lootsheet tr.ls td:first-child, .lootsheet tr.none td { color:var(--muted); }
+.lootsheet tr.ls td:last-child { color:var(--muted); font-weight:400; }
+.lootsheet tfoot td { border-bottom:none; border-top:1px solid var(--card-border); padding-top:5px; color:var(--gold); font-family:var(--caps); }
+.lootsheet tfoot td:last-child { font-size:15px; color:var(--gold); }
+.lootsheet button { padding:1px 7px; font-size:10px; margin-left:4px; }

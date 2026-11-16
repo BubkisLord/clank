@@ -8,11 +8,13 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Grenze+Gotisch:wght@500;700;900&family=IM+Fell+English:ital@0;1&family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<script>document.documentElement.classList.toggle('dark', localStorage.getItem('clank.theme') !== 'light');</script>
 </head>
 <body>
 <div id="app">
   <!-- Lobby -->
   <section id="lobby" class="screen">
+    <button class="theme-btn" data-theme-toggle title="Switch between dark and light (parchment) theme">☀</button>
     <div class="hero">
       <div class="crest"><img src="assets/dragon.svg" alt=""></div>
       <h1 class="title">Clank<span>!</span></h1>
@@ -35,6 +37,7 @@
 
   <!-- Waiting room -->
   <section id="waiting" class="screen hidden">
+    <button class="theme-btn" data-theme-toggle title="Switch between dark and light (parchment) theme">☀</button>
     <div class="hero small">
       <h1 class="title">Heist <span id="waitCode"></span></h1>
       <p class="sub">Gathering the crew</p>
@@ -55,6 +58,7 @@
       <div id="logo">Clank<span>!</span></div>
       <div id="players"></div>
       <div id="dragon"></div>
+      <button class="theme-btn" data-theme-toggle title="Switch between dark and light (parchment) theme">☀</button>
     </header>
     <div id="mainArea">
       <div id="boardWrap" class="pane tab-map">

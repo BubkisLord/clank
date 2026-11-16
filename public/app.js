@@ -316,6 +316,12 @@ function renderBoard() {
   };
   let s = `<defs>
     <linearGradient id="roomShade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d0a10" stop-opacity=".15"/><stop offset=".45" stop-color="#0d0a10" stop-opacity=".55"/><stop offset="1" stop-color="#0d0a10" stop-opacity=".9"/></linearGradient>
+    <symbol id="ic-swords" viewBox="0 0 24 24"><g id="ic-sword1">
+      <polygon points="2,2 5.2,3 15.6,13.4 13.4,15.6 3,5.2" fill="#eef1f6" stroke="#0d0a10" stroke-width=".6" stroke-linejoin="round"/>
+      <line x1="11.2" y1="17.6" x2="17.6" y2="11.2" stroke="#f0b04a" stroke-width="2" stroke-linecap="round"/>
+      <line x1="15.6" y1="15.6" x2="19.4" y2="19.4" stroke="#a8673a" stroke-width="2.2" stroke-linecap="round"/>
+      <circle cx="20.5" cy="20.5" r="1.4" fill="#f0b04a"/></g>
+      <use href="#ic-sword1" transform="translate(24 0) scale(-1 1)"/></symbol>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e3d4ad"/></marker>
   </defs>
   <image href="assets/tiles/tile-room.jpg" x="-20" y="-20" width="${G.width + 40}" height="${G.depthsY + 40}" preserveAspectRatio="xMidYMid slice" opacity=".16"/>
@@ -327,18 +333,19 @@ function renderBoard() {
     const a = room(t.from), c = room(t.to);
     const cls = ['tunnel', t.locked ? 'locked' : '', t.boots ? 'footprints' : '', t.monsters ? 'monsters' : '', t.shortcut ? 'shortcut' : ''].join(' ');
     const label = [t.locked ? '🔒' : '', t.boots ? '👣' : '', t.monsters ? '⚔'.repeat(t.monsters) : ''].join('');
+    const icons = [t.locked ? '🔒' : null, t.boots ? '👣' : null, ...Array(t.monsters || 0).fill('swords')].filter(Boolean);
     if (t.shortcut) {
       // routed along the side of the map so it never runs under other rooms
       const laneX = t.shortcut === 'left' ? 28 : G.width - 28;
       const pa = { x: a.x + (laneX > a.x ? W / 2 : -W / 2), y: a.y }, pc = { x: c.x + (laneX > c.x ? W / 2 : -W / 2), y: c.y };
       const d = `M${pa.x},${pa.y} L${laneX},${pa.y} L${laneX},${pc.y} L${pc.x},${pc.y}`;
       s += `<path d="${d}" class="tunnel-bg"/><path d="${d}" class="${cls}"><title>Locked shortcut between ${a.name} and ${c.name} — Master Key needed</title></path>`;
-      labels.push({ x: laneX, y: (pa.y + pc.y) / 2, text: '🔒⤴', w: 46 });
+      labels.push({ x: laneX, y: (pa.y + pc.y) / 2, icons: ['🔒', '⤴'], w: 48 });
       continue;
     }
     const p1 = edgePoint(a, c), p2 = edgePoint(c, a);
     s += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" class="tunnel-bg"/><line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" class="${cls}" ${t.oneWay ? 'marker-end="url(#arrow)"' : ''}><title>${a.name} ↔ ${c.name}${t.oneWay ? ' (one way)' : ''}${label ? ' ' + label : ''}</title></line>`;
-    if (label) labels.push({ x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2, text: label, w: 20 + 16 * [...label].length });
+    if (icons.length) labels.push({ x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2, icons, w: 12 + 18 * icons.length });
   }
   for (const r of b.rooms) {
     const rs = state.rooms[r.id];
@@ -354,7 +361,7 @@ function renderBoard() {
     const info = [];
     if (rs.artifact) info.push(`🏺 ${rs.artifact}`);
     if (rs.majorSecret) info.push('★ Major Secret');
-    if (rs.minorSecrets.length) info.push(`? ×${rs.minorSecrets.length}`);
+    if (rs.minorSecrets.length) info.push(`×${rs.minorSecrets.length} Minor Secret${rs.minorSecrets.length > 1 ? 's' : ''}`);
     if (rs.monkeyIdols) info.push(`×${rs.monkeyIdols} Idols Left`);
     if (r.crystal) info.push('Crystal Cave');
     if (r.market) info.push('Market');
@@ -371,7 +378,13 @@ function renderBoard() {
     here.forEach((p, i) => { const cx = rx + 16 + i * 24, cy = ry + 2; const cur = p.id === state.currentPlayer; s += `<g class="pawn-g">${cur ? `<circle cx="${cx}" cy="${cy}" r="11" class="pawn-ring" fill="none" stroke="${COLOR[p.color]}"/>` : ''}<circle cx="${cx}" cy="${cy}" r="11" class="pawn" fill="${COLOR[p.color]}"><title>${esc(p.name)}${cur ? ' (taking their turn)' : ''}</title></circle><text x="${cx}" y="${cy + 4}" class="pawn-l">${esc(p.name[0].toUpperCase())}</text></g>`; });
   }
   // hazard labels last so they sit on top of everything
-  for (const l of labels) s += `<rect x="${l.x - l.w / 2}" y="${l.y - 12}" width="${l.w}" height="24" rx="7" class="tlabel-bg"/><text x="${l.x}" y="${l.y + 5}" class="tlabel">${l.text}</text>`;
+  for (const l of labels) {
+    s += `<rect x="${l.x - l.w / 2}" y="${l.y - 12}" width="${l.w}" height="24" rx="7" class="tlabel-bg"/>`;
+    l.icons.forEach((ic, i) => {
+      const cx = l.x + (i - (l.icons.length - 1) / 2) * 18;
+      s += ic === 'swords' ? `<use href="#ic-swords" x="${cx - 8}" y="${l.y - 8}" width="16" height="16"/>` : `<text x="${cx}" y="${l.y + 5}" class="tlabel">${ic}</text>`;
+    });
+  }
   svg.innerHTML = s;
   svg.querySelectorAll('[data-mv]').forEach((g) => { g.onclick = () => act({ type: 'move', to: g.dataset.mv }); });
   svg.querySelectorAll('[data-tp]').forEach((g) => { g.onclick = () => { teleportMode = false; act({ type: 'teleport', to: g.dataset.tp }); }; });
@@ -585,3 +598,18 @@ function scheduleInline() { if (!location.hash.includes('figmacapture')) return;
   connect();
   scheduleInline();
 })();
+
+// ---------- theme: dark by default, parchment (light) on request; remembered per browser ----------
+function syncThemeButtons() {
+  const dark = document.documentElement.classList.contains('dark');
+  document.querySelectorAll('[data-theme-toggle]').forEach((b) => { b.textContent = dark ? '☀' : '☾'; b.title = dark ? 'Switch to the light parchment theme' : 'Switch to the dark theme'; });
+}
+document.querySelectorAll('[data-theme-toggle]').forEach((b) => {
+  b.onclick = () => {
+    const dark = !document.documentElement.classList.contains('dark');
+    document.documentElement.classList.toggle('dark', dark);
+    localStorage.setItem('clank.theme', dark ? 'dark' : 'light');
+    syncThemeButtons();
+  };
+});
+syncThemeButtons();

@@ -129,7 +129,7 @@ g[data-mv]:hover .room, g[data-tp]:hover .room { stroke:#fff; }
 .tunnel.footprints { stroke:#5ec8e8; stroke-dasharray:12 9; }
 .tunnel.monsters { stroke:#ff5a48; }
 .tunnel.shortcut { stroke:#ffd84d; stroke-dasharray:4 10; stroke-width:6.5; }
-.tlabel { font-size:15px; text-anchor:middle; pointer-events:none; }
+.tlabel { font-size:15px; text-anchor:middle; pointer-events:none; fill:#f1e6cc; }
 .tlabel-bg { fill:#0d0a10; stroke:#8a7256; stroke-width:1.5; }
 #board marker path { fill:#e9a93c; }
 .pawn { stroke:#0d0a10; stroke-width:2; filter:drop-shadow(0 2px 2px rgba(0,0,0,.6)); }
@@ -449,3 +449,45 @@ table.score td:first-child, table.score th:first-child { text-align:left; font-f
   #playArea > div:last-child { flex:0 0 var(--cw); }
   #playArea > div > .card { width:var(--cw); height:var(--ch); }
 }
+
+/* ============================================================
+   Dark theme (default; html.dark). Parchment surfaces become "dungeon stone": a cool slate-violet
+   with warm parchment text and gold accents. The light parchment theme is html without .dark.
+   ============================================================ */
+html.dark {
+  --parch-ink:#ece0c6; --parch-muted:#a99b86;
+  --stone-1:#2c2633; --stone-2:#1f1a26; --stone-in:#342c3d; --stone-in-2:#3d3447; --stone-line:#4f4459; --stone-edge:#0e0b12; --stone-gold:#e9b84f;
+}
+html.dark .card { background:linear-gradient(var(--stone-1), var(--stone-2)); border-color:var(--stone-edge); box-shadow:inset 0 0 0 2px var(--stone-line), 0 3px 8px rgba(0,0,0,.55); }
+html.dark .card .art { border-bottom-color:var(--stone-edge); }
+html.dark .card.playable { border-color:var(--gold); box-shadow:inset 0 0 0 2px var(--stone-line), 0 0 0 2px var(--gold), 0 6px 16px rgba(0,0,0,.6); }
+html.dark .card.playable:hover { box-shadow:inset 0 0 0 2px var(--stone-line), 0 0 0 2px var(--gold), 0 14px 24px rgba(0,0,0,.7); }
+html.dark .modal-box .card { box-shadow:inset 0 0 0 2px var(--stone-line), 0 6px 16px rgba(0,0,0,.5); }
+html.dark #playArea > div > .card { box-shadow:inset 0 0 0 2px var(--stone-line), -3px 2px 8px rgba(0,0,0,.6); }
+html.dark .card .pts, html.dark .pl .nm .g, html.dark .lootlist b { color:var(--stone-gold); }
+html.dark .card .cost { background:var(--stone-edge); box-shadow:inset 0 0 0 1px var(--stone-line); }
+html.dark .card.monster .cost { background:var(--red); }
+html.dark .card .body:empty::before { color:#6c6076; }
+html.dark .card.back { background:repeating-linear-gradient(45deg, #3a2719 0 6px, #2a1b14 6px 12px); border-color:#8c6a3c; }
+
+html.dark .scroll-panel { background:linear-gradient(var(--stone-1), var(--stone-2)); box-shadow:0 20px 60px rgba(0,0,0,.6), inset 0 0 0 1px #6b5a3e, inset 0 0 0 5px var(--stone-1), inset 0 0 0 6px #6b5a3e; }
+html.dark .modal-box { background:linear-gradient(var(--stone-1), var(--stone-2)); box-shadow:0 30px 90px rgba(0,0,0,.7), inset 0 0 0 1px #6b5a3e, inset 0 0 0 5px var(--stone-1), inset 0 0 0 6px #6b5a3e; }
+html.dark .share, html.dark #waitPlayers li, html.dark .ps, html.dark .lootlist span, html.dark .botabout { background:var(--stone-in); border-color:var(--stone-line); }
+html.dark .share:hover { background:var(--stone-in-2); }
+html.dark .share.copied { background:#26382c; border-color:var(--green); }
+html.dark #waitPlayers li.addbot { background:none; }
+html.dark #waitPlayers li.addbot button { background:rgba(255,255,255,.03); border-color:var(--stone-line); color:var(--parch-muted); }
+html.dark #waitPlayers li.addbot button:hover { background:var(--stone-in); border-color:var(--gold-2); color:var(--parch-ink); }
+html.dark input { background:#18141d; border-color:var(--stone-line); }
+html.dark .breakdown { border-color:var(--stone-line); }
+html.dark table.score td, html.dark table.score th { border-bottom-color:var(--stone-line); }
+html.dark button.defer { border-color:var(--stone-line); }
+
+html.dark .pl, html.dark .tok { background:linear-gradient(var(--stone-1), var(--stone-2)); border-color:#5a4a3a; box-shadow:inset 0 0 0 1px rgba(255,255,255,.05); }
+html.dark .pl.current { box-shadow:inset 0 0 0 1px rgba(255,255,255,.08), 0 0 0 2px var(--gold), 0 0 16px rgba(227,168,58,.5); }
+html.dark .pl .hp i.off { background:var(--stone-line); opacity:.7; }
+
+/* theme switch (top bar and lobby) */
+.theme-btn { flex:none; padding:5px 9px; font-size:15px; line-height:1; }
+#lobby .theme-btn, #waiting .theme-btn { position:fixed; top:14px; right:14px; z-index:5; }
+@media (max-width: 900px) { #topbar .theme-btn { justify-self:end; } }

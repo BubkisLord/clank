@@ -526,3 +526,38 @@ html.dark { --kw-skill:#7ab8f5; --kw-swords:#ff7d70; --kw-boots:#e8aa5c; --kw-go
 .kw-heal { color:var(--kw-heal); } .kw-teleport { color:var(--kw-teleport); } .kw-trash { color:var(--kw-trash); }
 .kw-danger { color:var(--kw-danger); } .kw-points { color:var(--kw-points); }
 .kw-when { font-family:var(--caps); font-size:.9em; letter-spacing:.3px; }
+
+/* ---------- card borders like the card backs: one thin muted-gold line, barely any lift ---------- */
+:root { --card-border:#a4875a; }
+html.dark { --card-border:#7a5f3c; }
+.card, html.dark .card { border:1px solid var(--card-border); border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,.35); }
+.modal-box .card, html.dark .modal-box .card { box-shadow:0 1px 3px rgba(0,0,0,.25); }
+#playArea > div > .card, html.dark #playArea > div > .card { box-shadow:-2px 1px 4px rgba(0,0,0,.45); }
+.card.back, html.dark .card.back { border:1px solid #8c6a3c; box-shadow:inset 0 0 0 3px #1c120c, 0 1px 3px rgba(0,0,0,.35); }
+.card.playable, html.dark .card.playable { border-color:var(--gold); box-shadow:0 0 0 1px var(--gold), 0 0 10px rgba(227,168,58,.35); }
+.card.playable:hover, html.dark .card.playable:hover { box-shadow:0 0 0 1px var(--gold), 0 8px 16px rgba(0,0,0,.5), 0 0 14px rgba(227,168,58,.45); }
+
+/* Dungeon Row / Reserve: on your turn, cards you can take are outlined; click the card itself */
+.card.can-buy, .card.can-use, .card.can-fight { cursor:pointer; transition:transform .15s, box-shadow .15s; }
+.card.can-buy, html.dark .card.can-buy { border-color:var(--gold); box-shadow:0 0 0 1px var(--gold), 0 0 12px rgba(227,168,58,.45); }
+.card.can-use, html.dark .card.can-use { border-color:#b07cf0; box-shadow:0 0 0 1px #b07cf0, 0 0 12px rgba(176,124,240,.45); }
+.card.can-fight, html.dark .card.can-fight { border-color:#e0533f; box-shadow:0 0 0 1px #e0533f, 0 0 12px rgba(224,83,63,.45); }
+.card.can-buy:hover, .card.can-use:hover, .card.can-fight:hover { transform:translateY(-4px); }
+.card.can-buy:active, .card.can-use:active, .card.can-fight:active { transform:translateY(-1px) scale(.98); }
+
+/* ---------- your piles: face-down deck, discard pile showing its top card, and a trashed tab ---------- */
+.piles { display:flex; gap:10px; align-items:flex-start; width:100%; margin-bottom:6px; }
+.pile, .pile:hover:not(:disabled) { background:none; border:none; box-shadow:none; padding:0; filter:none; display:flex; flex-direction:column; align-items:center; gap:4px; color:var(--muted); font-family:var(--body); font-weight:normal; letter-spacing:0; font-size:12px; }
+.pile b { color:var(--text); font-family:var(--caps); }
+.pcard { width:46px; height:64px; border-radius:5px; display:flex; align-items:center; justify-content:center; position:relative; transition:transform .15s; }
+.pile:hover .pcard { transform:translateY(-3px); }
+.pcard.back { background:repeating-linear-gradient(45deg, #3a2719 0 5px, #2a1b14 5px 10px); border:1px solid #8c6a3c; box-shadow:inset 0 0 0 2px #1c120c, 2px 2px 0 #1f140d, 3px 3px 0 #8c6a3c55; }
+.pcard.back img { width:60%; opacity:.85; }
+.pcard.face { background:var(--card-face); border:1px solid var(--card-border); flex-direction:column; justify-content:flex-start; overflow:hidden; box-shadow:2px 2px 0 #1f140d, 3px 3px 0 #8c6a3c55; }
+.pcard.face::before { content:""; flex:none; width:100%; height:11px; background:#5b4636; }
+.pcard.face.companion::before { background:#2f68a8; } .pcard.face.device::before { background:#6a4096; } .pcard.face.monster::before { background:#a3302a; }
+.pcard.face.gem::before { background:#1b8075; } .pcard.face.reserve::before { background:#94691c; }
+.pcard.face i { font-style:normal; font-family:var(--display); font-size:9.5px; line-height:1.1; color:var(--parch-ink); padding:3px; text-align:center; }
+.pcard.empty { border:1px dashed var(--card-border); }
+.pile.trash, .pile.trash:hover:not(:disabled) { height:64px; justify-content:center; padding:4px 3px; border:1px solid var(--card-border); border-radius:4px; background:rgba(0,0,0,.25); writing-mode:vertical-rl; font-size:11px; }
+.pile.trash:hover:not(:disabled) { border-color:var(--gold); color:var(--text); }

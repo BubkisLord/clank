@@ -1,6 +1,7 @@
 /* Clank! browser client */
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 let STATIC = null;       // cards, secrets, board
 let ws = null;
 let state = null;
@@ -159,7 +160,7 @@ function richText(text) {
     .replace(/\b(Defeat|Arrive|Acquire):/g, '<b class="kw-when">$1:</b>');
 }
 
-function cardHTML(def, { cost, count, buttons = '', playable = false, small = false } = {}) {
+function cardHTML(def, { cost, count, buttons = '', playable = false, small = false, cls = '', attrs = '' } = {}) {
   const kind = def.reserve ? 'reserve ' + def.kind : def.kind;
   const c = cost ?? def.cost;
   const costLabel = def.kind === 'monster' ? `⚔ ${def.swords}` : (c > 0 || def.reserve ? `${c}` : '');
@@ -167,7 +168,7 @@ function cardHTML(def, { cost, count, buttons = '', playable = false, small = fa
     + (def.danger ? '<span class="badge danger-ic" title="Danger: each dragon attack draws 1 extra cube while this is in the row">☠</span>' : '');
   const art = artFor(def);
   const subtype = def.kind === 'monster' ? 'Monster' : def.kind === 'device' ? 'Device' : def.tags.includes('gem') ? 'Gem' : def.tags.includes('companion') ? 'Companion' : def.tags.includes('equipment') ? 'Item' : '';
-  return `<div class="card ${kind} ${art} ${playable ? 'playable' : ''}" title="${def.text}">
+  return `<div class="card ${kind} ${art} ${playable ? 'playable' : ''} ${cls}" title="${def.text}" ${attrs}>
     <div class="banner"><span>${def.name}</span><span>${count != null ? `<span class="count">×${count}</span>` : ''}</span></div>
     ${subtype ? `<div class="subtype">${subtype}</div>` : ''}
     <div class="body">${richText(def.text)}</div>
@@ -267,9 +268,8 @@ function groupCards(cards) {
   for (const c of cards) { const d = cdef(c); const g = m.get(d.id) || { def: d, n: 0 }; g.n++; m.set(d.id, g); }
   return [...m.values()].sort((x, y) => x.def.name.localeCompare(y.def.name));
 }
-function showCards(p) {
+function showCards(p, focus) {
   p = state.players.find((x) => x.id === p.id) || p; // always the freshest copy
-  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
   const handNote = p.hand ? (p.id === me ? '' : 'visible while it is their turn') : `${plural(p.handCount, 'card')}, hidden until their turn`;
   const sections = [
     ['Hand', p.hand || [], handNote, false],
@@ -302,8 +302,10 @@ function showCards(p) {
   $('viewerBody').innerHTML = (p.bot && p.botAbout ? `<p class="botabout"><b>${esc(p.botStyle)}</b> ${esc(p.botAbout)}</p>` : '') + `<div class="pstats">${stats}</div>${bd}<div class="vsec"><h4>Loot</h4><div class="lootlist">${loot.length ? loot.map((x) => `<span>${x}</span>`).join('') : '<span class="muted">nothing yet</span>'}</div></div>`
     + sections.map(([title, cards, note, grouped]) => `<div class="vsec"><h4>${title} <span class="muted">${note}</span></h4><div class="cards small">${title === 'Hand' && !p.hand && p.handCount ? backs(p.handCount) : cards.length ? (grouped ? groupCards(cards).map((g) => cardHTML(g.def, { count: g.n > 1 ? g.n : undefined })).join('') : cards.map((c) => cardHTML(cdef(c))).join('')) : '<span class="muted">empty</span>'}</div></div>`).join('');
   $('viewer').dataset.pid = p.id;
+  const wasOpen = !$('viewer').classList.contains('hidden');
   $('viewer').classList.remove('hidden');
   $('viewerClose').onclick = () => closeModal('viewer');
+  if (focus && !wasOpen) [...$('viewerBody').querySelectorAll('.vsec h4')].find((h) => h.textContent.startsWith(focus))?.scrollIntoView({ block: 'start' });
 }
 function renderDragon() {
   const track = STATIC.rules.rageTrack.map((v, i) => `<b class="${i === state.rage ? 'on' : i < state.rage ? 'past' : ''}">${v}</b>`).join('');
@@ -432,13 +434,8 @@ function renderRow() {
   $('dungeonRow').innerHTML = state.dungeonRow.map((c, i) => {
     if (!c) return '<div class="card empty"></div>';
     const d = cdef(c);
-    let btn = '';
-    if (isMyTurn() && !state.pending) {
-      if (d.kind === 'monster' && L?.fightable.includes(i)) btn = `<button data-fight="${i}">Fight</button>`;
-      if (d.kind !== 'monster' && L?.acquirable.includes(i)) btn = `<button data-acq="${i}">${d.kind === 'device' ? 'Use' : 'Acquire'}</button>`;
-    }
     const disc = (state.turn?.gemDiscount && d.tags.includes('gem')) ? Math.max(0, d.cost - state.turn.gemDiscount) : undefined;
-    return cardHTML(d, { buttons: btn, cost: disc });
+    return cardHTML(d, { cost: disc, ...cardAction(d, i, L) });
   }).join('');
   wireButtons($('dungeonRow'));
 }
@@ -449,19 +446,65 @@ function renderReserve() {
   $('reserve').innerHTML = ids.map((id) => {
     const d = cdef(id);
     const count = id === 'goblin' ? null : state.reserve[id];
-    let btn = '';
-    if (isMyTurn() && !state.pending) {
-      if (id === 'goblin' && L?.canFightGoblin) btn = '<button data-fight="goblin">Fight</button>';
-      else if (L?.reserveBuy.includes(id)) btn = `<button data-acq="${id}">Acquire</button>`;
-    }
-    return cardHTML(d, { count, buttons: btn });
+    return cardHTML(d, { count, ...cardAction(d, id, L) });
   }).join('');
   wireButtons($('reserve'));
 }
 
+// What clicking a Dungeon Row / Reserve card does on your turn: buy it, use it (devices) or fight it.
+// The card gets a highlighted border instead of a button.
+function cardAction(d, slot, L) {
+  if (!isMyTurn() || state.pending || !L) return {};
+  const fight = slot === 'goblin' ? L.canFightGoblin : d.kind === 'monster' && L.fightable.includes(slot);
+  if (fight) return { cls: 'can-fight', attrs: `data-fight="${slot}"` };
+  const buy = typeof slot === 'number' ? d.kind !== 'monster' && L.acquirable.includes(slot) : L.reserveBuy.includes(slot);
+  if (buy) return { cls: d.kind === 'device' ? 'can-use' : 'can-buy', attrs: `data-acq="${slot}"` };
+  return {};
+}
 function wireButtons(root) {
-  root.querySelectorAll('[data-fight]').forEach((b) => { b.onclick = () => act({ type: 'fight', slot: b.dataset.fight === 'goblin' ? 'goblin' : Number(b.dataset.fight) }); });
-  root.querySelectorAll('[data-acq]').forEach((b) => { b.onclick = () => act({ type: 'acquire', slot: /^\d+$/.test(b.dataset.acq) ? Number(b.dataset.acq) : b.dataset.acq }); });
+  root.querySelectorAll('[data-fight]').forEach((el) => { el.onclick = () => { cardFx(el, 'slain'); act({ type: 'fight', slot: el.dataset.fight === 'goblin' ? 'goblin' : Number(el.dataset.fight) }); }; });
+  root.querySelectorAll('[data-acq]').forEach((el) => {
+    el.onclick = () => {
+      if (el.classList.contains('can-use')) cardFx(el, 'used'); else flyToDiscard(el);
+      act({ type: 'acquire', slot: /^\d+$/.test(el.dataset.acq) ? Number(el.dataset.acq) : el.dataset.acq });
+    };
+  });
+}
+
+// ---------- card animations ----------
+// a copy of the card lifted off the page, so the animation survives the re-render that follows
+function ghost(el) {
+  const r = el.getBoundingClientRect(), g = el.cloneNode(true);
+  g.classList.remove('can-buy', 'can-use', 'can-fight');
+  g.removeAttribute('title');
+  Object.assign(g.style, { position: 'fixed', left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px`, margin: 0, zIndex: 80, pointerEvents: 'none' });
+  document.body.append(g);
+  return { g, r };
+}
+// bought cards fly into your discard pile, which gives a little bump when they land
+function flyToDiscard(el) {
+  const target = $('pileDiscard');
+  if (!target || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const { g, r } = ghost(el), t = target.getBoundingClientRect();
+  const dx = t.left + t.width / 2 - (r.left + r.width / 2), dy = t.top + t.height / 2 - (r.top + r.height / 2), sc = t.width / r.width;
+  g.animate([
+    { transform: 'none', offset: 0 },
+    { transform: 'translate(0, -18px) scale(1.06) rotate(-2deg)', offset: 0.18 },
+    { transform: `translate(${dx}px, ${dy}px) scale(${sc}) rotate(8deg)`, opacity: 0.9, offset: 1 },
+  ], { duration: 650, easing: 'cubic-bezier(.5,0,.3,1)' }).onfinish = () => {
+    g.remove();
+    $('pileDiscard')?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.12)' }, { transform: 'scale(1)' }], { duration: 260, easing: 'ease-out' });
+  };
+}
+// fights: a red flash and the card drops away; devices: a purple flare
+function cardFx(el, kind) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const { g } = ghost(el);
+  g.classList.add(`fx-${kind}`);
+  const frames = kind === 'slain'
+    ? [{ transform: 'none', filter: 'none' }, { transform: 'translateX(-5px) rotate(-2deg)', filter: 'brightness(1.6) saturate(2) hue-rotate(-20deg)', offset: 0.2 }, { transform: 'translateX(5px) rotate(2deg)', offset: 0.35 }, { transform: 'translateY(30px) scale(.85) rotate(6deg)', opacity: 0 }]
+    : [{ transform: 'none', filter: 'none' }, { transform: 'scale(1.08)', filter: 'brightness(1.5) drop-shadow(0 0 14px #b07cf0)', offset: 0.3 }, { transform: 'scale(1.15)', opacity: 0 }];
+  g.animate(frames, { duration: 600, easing: 'ease-out' }).onfinish = () => g.remove();
 }
 
 function renderMarket() {
@@ -561,9 +604,16 @@ function renderMe() {
   if (v.items.backpack) toks.push(`<div class="tok">🎒 Backpack ×${v.items.backpack}</div>`);
   for (const c of v.items.crowns) toks.push(`<div class="tok">👑 Crown ${c}</div>`);
   if (v.mastery) toks.push(`<div class="tok">🏅 Mastery (20 pts)</div>`);
-  toks.push(`<button class="piles" id="viewPiles" title="Deck (alphabetical), discard pile, stats and score">📚 Deck ${v.deckCount} · Discard ${v.discard.length}${v.trashedCount ? ` · Trashed ${v.trashedCount}` : ''}</button>`);
-  $('tokens').innerHTML = toks.join('');
-  $('viewPiles').onclick = () => showCards(v);
+  const top = v.discard.length ? cdef(v.discard[v.discard.length - 1]) : null;
+  const piles = `<div class="piles">
+    <button class="pile" id="pileDeck" title="Deck: ${plural(v.deckCount, 'card')}. Click to see them (alphabetical)."><span class="pcard back"><img src="assets/dragon.svg" alt=""></span><span class="pl-l">Deck <b>${v.deckCount}</b></span></button>
+    <button class="pile" id="pileDiscard" title="Discard pile: ${plural(v.discard.length, 'card')}. Click to see them (newest first)."><span class="pcard ${top ? `face ${top.reserve ? 'reserve' : top.kind}${top.tags.includes('gem') ? ' gem' : ''}` : 'empty'}">${top ? `<i>${esc(top.name)}</i>` : ''}</span><span class="pl-l">Discard <b>${v.discard.length}</b></span></button>
+    ${v.trashedCount ? `<button class="pile trash" id="pileTrash" title="${plural(v.trashedCount, 'card')} trashed (removed from the game). Click to see them."><span>Trashed <b>${v.trashedCount}</b></span></button>` : ''}
+  </div>`;
+  $('tokens').innerHTML = piles + toks.join('');
+  $('pileDeck').onclick = () => showCards(v, 'Deck');
+  $('pileDiscard').onclick = () => showCards(v, 'Discard pile');
+  if ($('pileTrash')) $('pileTrash').onclick = () => showCards(v, 'Trashed');
   $('tokens').querySelectorAll('[data-use]').forEach((b) => { b.onclick = () => act({ type: 'useSecret', uid: b.dataset.use }); });
 }
 function renderPrompt() {

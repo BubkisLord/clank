@@ -97,10 +97,13 @@ finds. Hard detours past secrets, idols and markets, avoids artifacts a rival wi
 and reaches slightly deeper. In bot-only simulations Hard wins about a third more often than
 Medium, and Easy rarely wins.
 
-The second Bots setting sets the pace. **Reckless** deals only raiders and steady thieves and
-pushes them to grab the nearest artifact and run. **Patient** deals only deck-builders and greedy
-delvers and keeps them building for longer. **Mixed** (the default) deals all four styles. In
-3-bot simulations, games last about 5.5 rounds on Reckless, 6.7 on Mixed and 8 on Patient.
+The second Bots setting sets the pace. **Reckless** deals raiders, steady thieves and greedy
+delvers and pushes them to grab the nearest artifact and run. **Patient** deals deck-builders,
+steady thieves and greedy delvers. They spend up to 7 rounds building near the entrance, walk far
+for big artifacts, and once they hold one they keep looting nearby rooms (until round 16) as long
+as nobody has escaped, they are not badly hurt and the dragon is calm. **Mixed** (the default)
+deals all four styles. In 3-bot simulations, games last about 5.7 rounds on Reckless, 7 on Mixed
+and 14 on Patient.
 Changing the pace re-deals the styles of bots already in the lobby.
 
 ## Accuracy notes

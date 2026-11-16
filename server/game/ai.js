@@ -46,11 +46,13 @@ export const LEVELS = {
 // Game length. reckless: only fast styles, pushed harder, so games end sooner;
 // patient: only slow styles that build a deck first, so games run longer.
 // styles: the pool bots are dealt from; haste: multiplier on the style's haste; build: extra build rounds;
-// grab: take any artifact at least this valuable on the way, instead of walking on to the planned one.
+// grab: take any artifact at least this valuable on the way, instead of walking on to the planned one;
+// buildRage: keep building until the dragon's rage reaches this (default 4);
+// linger: until this round, a thief holding an artifact keeps looting nearby rooms while it is safe.
 export const PACES = {
-    reckless: { label: 'Reckless', styles: ['raider', 'balanced'], haste: 2, build: 0, grab: 8 },
+    reckless: { label: 'Reckless', styles: ['raider', 'balanced', 'greedy'], haste: 2, build: 0, grab: 8 },
     mixed: { label: 'Mixed', styles: Object.keys(STYLES), haste: 1, build: 0 },
-    patient: { label: 'Patient', styles: ['builder', 'greedy'], haste: 0.6, build: 2 },
+    patient: { label: 'Patient', styles: ['builder', 'balanced', 'greedy'], haste: 0.25, build: 7, buildRage: 6, linger: 16 },
 };
 
 const between = ([a, b]) => a + Math.random() * (b - a);
@@ -194,12 +196,18 @@ function chooseTarget(game, p) {
     const market = packTrip ? game.board.rooms.filter((r) => r.market && here.dist[r.id] !== undefined).sort((a, b) => here.dist[a.id] - here.dist[b.id])[0] : null;
     const full = p.artifacts.length >= capacity && !market;
     const goHome = full || (p.artifacts.length && (p.damage >= homeAt || (someoneOut && !greed) || game.rage >= (greed ? 8 : 5)));
+    const P = paceOf(game), round = Math.floor(game.turnNumber / game.players.length);
+    // patient thieves keep looting before heading out, while nobody has left and it is safe
+    if (goHome && P.linger && round < P.linger && p.damage < 5 && game.rage < 5 && !someoneOut) {
+        const loot = game.board.rooms.filter((r) => r.id !== p.room && here.dist[r.id] !== undefined && here.dist[r.id] <= 5 && roomLoot(game, p, r.id) > 0)
+            .sort((a, b) => roomLoot(game, p, b.id) - here.dist[b.id] * 0.5 - (roomLoot(game, p, a.id) - here.dist[a.id] * 0.5))[0];
+        if (loot) return { room: loot.id, why: 'looting' };
+    }
     if (goHome) return { room: 'start', why: 'escape' };
     if (market) return { room: market.id, why: 'backpack' };
 
     // deck-builders loiter near the entrance first, picking up secrets on the surface
-    const round = Math.floor(game.turnNumber / game.players.length);
-    if (!p.artifacts.length && round < (p.bot?.buildRounds || 0) && game.rage < 4) {
+    if (!p.artifacts.length && round < (p.bot?.buildRounds || 0) && game.rage < (P.buildRage ?? 4)) {
         const near = game.board.rooms.filter((r) => !r.depths && !r.start && here.dist[r.id] !== undefined && here.dist[r.id] <= 4 && roomLoot(game, p, r.id) > 0)
             .sort((a, b) => here.dist[a.id] - here.dist[b.id])[0];
         return near ? { room: near.id, why: 'building' } : null;

@@ -488,15 +488,35 @@ html.dark .pl .hp i.off { background:var(--stone-line); opacity:.7; }
 #lobby .theme-btn, #waiting .theme-btn { position:fixed; top:14px; right:14px; z-index:5; }
 @media (max-width: 900px) { #topbar .theme-btn { justify-self:end; } }
 
-/* ---------- text-only cards: a coloured title bar by card type, and coloured keywords ---------- */
-.card .banner { position:static; flex:none; padding:6px 8px; background:linear-gradient(#5b4636, #3e2e22); border-bottom:2px solid rgba(0,0,0,.35); box-shadow:none; text-shadow:0 1px 1px rgba(0,0,0,.6); }
-.cards.small .card .banner { padding:3px 5px; }
-.card.companion .banner { background:linear-gradient(#3b78bd, #275791); box-shadow:none; }
-.card.device .banner { background:linear-gradient(#7d4fae, #583183); box-shadow:none; }
-.card.monster .banner { background:linear-gradient(#b8392f, #85241d); box-shadow:none; }
-.card.gem .banner { background:linear-gradient(#22968a, #156b62); box-shadow:none; }
-.card.reserve .banner { background:linear-gradient(#b0802a, #7d5814); box-shadow:none; }
-.card .body { font-size:1.05em; }
+/* ---------- text-only cards, printed-card look: flat colours, a thin inner frame, a solid title bar ---------- */
+:root { --card-face:#efe4ca; --card-frame:#b9a277; --card-edge:#3b2a1d; --card-rule:#cdb98c; }
+html.dark { --card-face:#26212c; --card-frame:#4a4053; --card-edge:#0e0b12; --card-rule:#3a3243; }
+.card, html.dark .card { background:var(--card-face); border:1.5px solid var(--card-edge); border-radius:5px;
+  box-shadow:inset 0 0 0 3px var(--card-face), inset 0 0 0 4px var(--card-frame), 0 2px 6px rgba(0,0,0,.4); }
+.card.playable, html.dark .card.playable { border-color:var(--gold); box-shadow:inset 0 0 0 3px var(--card-face), inset 0 0 0 4px var(--card-frame), 0 0 0 2px var(--gold), 0 6px 14px rgba(0,0,0,.5); }
+.card.playable:hover, html.dark .card.playable:hover { box-shadow:inset 0 0 0 3px var(--card-face), inset 0 0 0 4px var(--card-frame), 0 0 0 2px var(--gold), 0 12px 20px rgba(0,0,0,.55); }
+.modal-box .card, html.dark .modal-box .card, #playArea > div > .card, html.dark #playArea > div > .card { box-shadow:inset 0 0 0 3px var(--card-face), inset 0 0 0 4px var(--card-frame), -2px 2px 6px rgba(0,0,0,.45); }
+.card.back, html.dark .card.back { background:repeating-linear-gradient(45deg, #3a2719 0 6px, #2a1b14 6px 12px); border-color:#8c6a3c; box-shadow:inset 0 0 0 3px #1c120c, 0 2px 6px rgba(0,0,0,.4); }
+
+/* title bar: one solid colour per card type, inset inside the frame */
+.card .banner { position:static; flex:none; margin:5px 5px 0; padding:4px 7px; border-radius:2px; background:#5b4636; box-shadow:none; text-shadow:none; letter-spacing:.4px; border-bottom:none; }
+.cards.small .card .banner { margin:3px 3px 0; padding:2px 5px; }
+.card.companion .banner { background:#2f68a8; box-shadow:none; }
+.card.device .banner { background:#6a4096; box-shadow:none; }
+.card.monster .banner { background:#a3302a; box-shadow:none; }
+.card.gem .banner { background:#1b8075; box-shadow:none; }
+.card.reserve .banner { background:#94691c; box-shadow:none; }
+
+/* type line with a printed rule after it */
+.card .subtype { display:flex; align-items:center; gap:6px; padding:5px 9px 0; }
+.card .subtype::after { content:""; flex:1; height:1px; background:var(--card-rule); }
+
+/* the text gives way before the cost row does, so costs and swords are never cut off */
+.card .body { flex:1 1 auto; min-height:0; overflow:hidden; padding:5px 9px; }
+.card .foot { flex:none; padding:3px 8px 7px; }
+.card .cost, html.dark .card .cost { box-shadow:none; border-radius:4px; }
+html.dark .card .cost { background:#0e0b12; border:1px solid var(--card-frame); }
+#reserve .card .subtype { display:none; }
 
 :root { --kw-skill:#2563a8; --kw-swords:#b0302a; --kw-boots:#8a5512; --kw-gold:#a37200; --kw-clank:#c4471f; --kw-draw:#6b3fa0; --kw-heal:#2f7d47; --kw-teleport:#1d7a8c; --kw-trash:#6b6157; --kw-danger:#9b1c1c; --kw-points:#7a5200; }
 html.dark { --kw-skill:#7ab8f5; --kw-swords:#ff7d70; --kw-boots:#e8aa5c; --kw-gold:#f3c552; --kw-clank:#ff9466; --kw-draw:#c7a2f2; --kw-heal:#72d698; --kw-teleport:#62d4e2; --kw-trash:#b6ab9e; --kw-danger:#ff6464; --kw-points:#f3c552; }

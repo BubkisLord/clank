@@ -47,12 +47,13 @@ export const LEVELS = {
 // patient: only slow styles that build a deck first, so games run longer.
 // styles: the pool bots are dealt from; haste: multiplier on the style's haste; build: extra build rounds;
 // grab: take any artifact at least this valuable on the way, instead of walking on to the planned one;
-// buildRage: keep building until the dragon's rage reaches this (default 4);
-// linger: until this round, a thief holding an artifact keeps looting nearby rooms while it is safe.
+// explore: detours past secrets, idols and markets on the way down (like Hard bots);
+// linger: until this round, a thief holding an artifact keeps looting nearby rooms (the depths first) while it is
+//   safe: under 5 damage, nobody out, and the dragon's rage below calm (default 5).
 export const PACES = {
     reckless: { label: 'Reckless', styles: ['raider', 'balanced', 'greedy'], haste: 2, build: 0, grab: 8 },
     mixed: { label: 'Mixed', styles: Object.keys(STYLES), haste: 1, build: 0 },
-    patient: { label: 'Patient', styles: ['builder', 'balanced', 'greedy'], haste: 0.25, build: 7, buildRage: 6, linger: 16 },
+    patient: { label: 'Patient', styles: ['builder', 'balanced', 'greedy'], haste: 0.25, build: 0, explore: true, linger: 16, calm: 7 },
 };
 
 const between = ([a, b]) => a + Math.random() * (b - a);
@@ -198,16 +199,17 @@ function chooseTarget(game, p) {
     const goHome = full || (p.artifacts.length && (p.damage >= homeAt || (someoneOut && !greed) || game.rage >= (greed ? 8 : 5)));
     const P = paceOf(game), round = Math.floor(game.turnNumber / game.players.length);
     // patient thieves keep looting before heading out, while nobody has left and it is safe
-    if (goHome && P.linger && round < P.linger && p.damage < 5 && game.rage < 5 && !someoneOut) {
-        const loot = game.board.rooms.filter((r) => r.id !== p.room && here.dist[r.id] !== undefined && here.dist[r.id] <= 5 && roomLoot(game, p, r.id) > 0)
-            .sort((a, b) => roomLoot(game, p, b.id) - here.dist[b.id] * 0.5 - (roomLoot(game, p, a.id) - here.dist[a.id] * 0.5))[0];
+    if (goHome && P.linger && round < P.linger && p.damage < 5 && game.rage < (P.calm ?? 5) && !someoneOut) {
+        const worth = (r) => roomLoot(game, p, r.id) + (r.depths ? 2 : 0) - here.dist[r.id] * 0.5;
+        const loot = game.board.rooms.filter((r) => r.id !== p.room && here.dist[r.id] !== undefined && here.dist[r.id] <= 8 && roomLoot(game, p, r.id) > 0)
+            .sort((a, b) => worth(b) - worth(a))[0];
         if (loot) return { room: loot.id, why: 'looting' };
     }
     if (goHome) return { room: 'start', why: 'escape' };
     if (market) return { room: market.id, why: 'backpack' };
 
     // deck-builders loiter near the entrance first, picking up secrets on the surface
-    if (!p.artifacts.length && round < (p.bot?.buildRounds || 0) && game.rage < (P.buildRage ?? 4)) {
+    if (!p.artifacts.length && round < (p.bot?.buildRounds || 0) && game.rage < 4) {
         const near = game.board.rooms.filter((r) => !r.depths && !r.start && here.dist[r.id] !== undefined && here.dist[r.id] <= 4 && roomLoot(game, p, r.id) > 0)
             .sort((a, b) => here.dist[a.id] - here.dist[b.id])[0];
         return near ? { room: near.id, why: 'building' } : null;
@@ -234,12 +236,12 @@ function chooseTarget(game, p) {
 
 // Pick the next room to walk into, or null.
 function chooseStep(game, p, L, target) {
-    const lvl = levelOf(game, p);
+    const lvl = levelOf(game, p), explore = paceOf(game).explore;
     const ok = L.moves.filter((m) => m.ok && p.damage + m.damage < HEALTH_MAX - 2);
     if (!ok.length) return null;
     const toTarget = routeCosts(game, p, target.room, { reverse: true }).dist;
     const base = toTarget[p.room] ?? Infinity;
-    if (!lvl.detour) {
+    if (!lvl.detour && !explore) {
         const { prev } = routeCosts(game, p, p.room);
         const step = firstStep(prev, p.room, target.room);
         return ok.find((m) => m.to === step)?.to ?? null;
@@ -250,7 +252,7 @@ function chooseStep(game, p, L, target) {
         const after = toTarget[m.to];
         if (after === undefined) continue;
         const extra = m.cost + (m.monsters ? m.damage * 1.5 : 0) + after - base; // 0 or less = on the shortest path
-        if (extra > 2.5) continue;
+        if (extra > (explore ? 3.5 : 2.5)) continue;
         const score = roomLoot(game, p, m.to) * 0.6 - Math.max(0, extra) * 1.2 - after * 0.05;
         if (!best || score > best.score) best = { to: m.to, score };
     }

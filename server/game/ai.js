@@ -23,11 +23,13 @@ export const BOT_FIRST_NAMES = ['Sir', 'Old', 'Lady', 'Brother', 'Mags', 'Wren',
 // buildRounds: rounds spent near the entrance building a deck before delving
 // homeAt: damage at which it heads for the exit if it holds an artifact
 // about: plain description shown on the player sheet
+// backpack: plans a market trip to buy one, then fills it; goldW: how much it wants gold (for that backpack)
+// greed: ignores the usual reasons to turn back (rage, a rival escaping) until it is badly hurt
 export const STYLES = {
     raider: { label: 'Reckless raider', about: 'Grabs the nearest decent artifact and sprints for the exit. Prefers movement to buying cards and shrugs off Clank!, so it is usually first out, with a smaller haul.', grab: 10, haste: 1.6, risk: [0.9, 1.2], cardW: 0.6, bootW: 1.9, clankW: 0.5, buildRounds: [0, 0], homeAt: 8 },
     builder: { label: 'Patient deck-builder', about: 'Spends the first rounds near the entrance buying cards, especially ones worth points, then delves with a stronger deck. Slow to start, dangerous late.', haste: 0.8, risk: [0.9, 1.2], cardW: 1.4, bootW: 1, clankW: 1, points: 0.4, buildRounds: [1, 2], homeAt: 6 },
     balanced: { label: 'Steady thief', about: 'Weighs each artifact against how far and how dangerous it is to reach. No strong habits, just sensible choices.', haste: 1, risk: [0.75, 1.35], cardW: 1, bootW: 1.2, clankW: 1, buildRounds: [0, 0], homeAt: 6 },
-    greedy: { label: 'Greedy delver', about: 'Goes deep for the biggest artifacts and buys a backpack so it can carry two out. Stays down longer when hurt, so it comes back rich or not at all.', haste: 0.55, risk: [0.9, 1.2], cardW: 0.9, bootW: 1.4, clankW: 0.8, buildRounds: [0, 1], homeAt: 7, backpack: true },
+    greedy: { label: 'Greedy delver', about: 'Hoards gold for a backpack, then goes deep to fill it with two of the biggest artifacts. Ignores the angry dragon and rivals escaping until it is badly hurt, so it comes back rich or not at all.', haste: 0.35, risk: [0.9, 1.2], cardW: 0.9, bootW: 1.4, clankW: 0.8, goldW: 3, buildRounds: [0, 1], homeAt: 9, backpack: true, greed: true },
 };
 
 // noise: random error added to every judgement; slip: chance of skipping a good buy or fight;
@@ -74,7 +76,7 @@ function effectValue(list, ctx) {
     let v = 0;
     for (const e of list || []) {
         if (typeof e === 'function' || e.fn) { v += 1; continue; }
-        v += (e.skill || 0) * 1 + (e.swords || 0) * 0.85 + (e.boots || 0) * ctx.bootW + (e.gold || 0) * 0.6
+        v += (e.skill || 0) * 1 + (e.swords || 0) * 0.85 + (e.boots || 0) * ctx.bootW + (e.gold || 0) * (ctx.goldW ?? 0.6)
             + (e.draw || 0) * ctx.drawW - (e.clank || 0) * ctx.clankW + (e.heal || 0) * ctx.healW + (e.teleport || 0) * 1.5;
         if (e.choose) v += Math.max(...e.choose.map((o) => effectValue(o.effects, ctx)));
         if (e.when) v += 0.5 * effectValue(e.effects, ctx);
@@ -104,6 +106,7 @@ function context(game, p) {
         drawW: 1.4 * (T.draw || 1),
         clankW: (0.35 + game.rage * 0.08 + p.damage * 0.05) * S.clankW * (T.clank || 1),
         healW: p.damage > 0 ? 0.9 : 0.1,
+        goldW: S.backpack && !p.items.backpack ? 0.6 * (S.goldW || 1) : 0.6,
         pointW: 0.3 + 0.7 * late + (T.points || 0) + (S.points || 0),
     };
 }
@@ -182,10 +185,17 @@ function chooseTarget(game, p) {
     const someoneOut = game.players.some((x) => x !== p && x.status !== 'in');
     const hurt = lvl.careless ? p.damage * 0.15 : p.damage * 0.5; // easy bots underrate their wounds
     const haste = (S.haste || 1) * (lvl.tune?.haste || 1) * paceOf(game).haste; // >1 prefers near artifacts and a quick exit
-    const turnCost = haste * (1 + game.rage * 0.5 + hurt + (someoneOut ? 8 : 0)) / (p.bot?.risk ?? 1);
+    // a greedy thief keeps going when a rival escapes or the dragon is angry, until it is badly hurt
+    const greed = S.greed && p.damage < 6;
+    const turnCost = haste * (1 + game.rage * 0.5 + hurt + (someoneOut ? (greed ? 3 : 8) : 0)) / (p.bot?.risk ?? 1);
     const homeAt = lvl.careless ? 8 : S.homeAt;
-    const goHome = p.artifacts.length >= capacity || (p.artifacts.length && (p.damage >= homeAt || someoneOut || game.rage >= 5));
+    // wants a backpack, and can afford one: plan a trip to the nearest market before (or after) the first artifact
+    const packTrip = S.backpack && !p.items.backpack && game.market.backpack > 0 && p.gold >= MARKET_PRICE && p.damage < homeAt - 2;
+    const market = packTrip ? game.board.rooms.filter((r) => r.market && here.dist[r.id] !== undefined).sort((a, b) => here.dist[a.id] - here.dist[b.id])[0] : null;
+    const full = p.artifacts.length >= capacity && !market;
+    const goHome = full || (p.artifacts.length && (p.damage >= homeAt || (someoneOut && !greed) || game.rage >= (greed ? 8 : 5)));
     if (goHome) return { room: 'start', why: 'escape' };
+    if (market) return { room: market.id, why: 'backpack' };
 
     // deck-builders loiter near the entrance first, picking up secrets on the surface
     const round = Math.floor(game.turnNumber / game.players.length);
@@ -320,8 +330,8 @@ export function nextAction(game, p) {
     if (L.canTakeArtifact && (target?.room === p.room || (!p.artifacts.length && (p.damage >= 5 || lvl.careless || ((S.grab || paceOf(game).grab) && game.rooms[p.room].artifact >= Math.min(S.grab || 99, paceOf(game).grab || 99)))))) return { type: 'takeArtifact' };
     if (L.canBuy.length) {
         const lockedArtifact = !p.items.masterKey && game.board.tunnels.some(([a, b, o = {}]) => o.locked && (game.rooms[a]?.artifact || game.rooms[b]?.artifact));
-        if (L.canBuy.includes('masterKey') && lockedArtifact && !p.artifacts.length && p.damage < 5) return { type: 'buy', item: 'masterKey' };
-        if (L.canBuy.includes('backpack') && S.backpack && !p.items.backpack && p.damage < 5) return { type: 'buy', item: 'backpack' };
+        if (L.canBuy.includes('backpack') && S.backpack && !p.items.backpack && p.damage < 7) return { type: 'buy', item: 'backpack' };
+        if (L.canBuy.includes('masterKey') && lockedArtifact && !p.artifacts.length && p.damage < 5 && !(S.backpack && !p.items.backpack)) return { type: 'buy', item: 'masterKey' };
         if (L.canBuy.includes('crown')) return { type: 'buy', item: 'crown' };
         if (L.canBuy.includes('backpack') && p.artifacts.length && p.damage < 4 && !p.items.backpack && p.gold >= MARKET_PRICE + 3) return { type: 'buy', item: 'backpack' };
     }

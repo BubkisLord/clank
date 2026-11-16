@@ -436,3 +436,16 @@ table.score td:first-child, table.score th:first-child { text-align:left; font-f
 @media (min-width: 901px) { .hand-zone { flex:1 1 auto; } .played-zone { max-width:36%; } }
 .botabout { margin:0 0 12px; padding:8px 12px; background:#fff8e6; border-left:4px solid #b99a66; border-radius:4px; font-size:14px; line-height:1.4; color:var(--parch-ink); }
 .botabout b { font-family:var(--caps); font-size:12px; letter-spacing:.5px; margin-right:4px; }
+/* Hand and played cards get an explicit size worked out from the panel height. Sizing them by
+   height with width:auto made Safari size each wrapper to the card's text on one line, which
+   left a gap after long-text cards such as Dwarven Peddler and Sapphire.
+   46px = zone heading (14) + gap (4) + hand padding (18) + room for its scrollbar (10);
+   24px = heading + gap + play padding (6). */
+@media (min-width: 901px) {
+  #meBottom { container-type:size; }
+  #hand > div { --ch:min(200px, calc(100cqh - 46px)); height:var(--ch); width:calc(var(--ch) * 150 / 208); }
+  #hand > div > .card { width:100%; height:100%; max-height:none; }
+  #playArea > div { --ch:min(150px, calc(100cqh - 24px)); --cw:calc(var(--ch) * 150 / 208); height:var(--ch); flex:0 1 calc(var(--cw) + 6px); }
+  #playArea > div:last-child { flex:0 0 var(--cw); }
+  #playArea > div > .card { width:var(--cw); height:var(--ch); }
+}

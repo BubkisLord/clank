@@ -89,7 +89,7 @@ Each bot is dealt a play style, and a table gets a mix:
 | Reckless raider | Buys boots, grabs the first artifact worth 10+ and runs, ignores wounds |
 | Patient deck-builder | Stays near the entrance for a round or two buying cards, likes point cards |
 | Steady thief | Weighs artifact value against distance and danger |
-| Greedy delver | Walks deep for the biggest artifacts and buys a backpack |
+| Greedy delver | Saves gold for a backpack (planning a market trip), then goes deep for two big artifacts; ignores rage and rivals escaping until badly hurt |
 
 The lobby's **Bots** setting picks the difficulty for all of them. Medium is the baseline.
 Easy misjudges cards and wounds, sometimes skips good buys, and grabs the first artifact it

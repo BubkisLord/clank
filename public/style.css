@@ -367,20 +367,12 @@ table.score td:first-child, table.score th:first-child { text-align:left; font-f
 /* the hand panel never grows past its cap; its rows shrink or scroll instead */
 #me { overflow:hidden; }
 #meBottom { flex:1 1 auto; min-height:0; }
-.played-zone { flex:0 1 auto; min-width:110px; }
 .loot-zone { flex:0 1 220px; min-width:0; overflow-y:auto; }
 #tokens { max-width:none; }
 /* played cards stay on one row and fan over each other when space runs out (newest on top) */
-#playArea { flex-wrap:nowrap; padding:2px 0 4px; }
-#playArea > div { flex:0 1 84px; min-width:24px; position:relative; }
-#playArea > div > .card { --w:84px; }
-#playArea > div:last-child { flex-shrink:0; }
-#playArea > div:hover { z-index:3; }
-#playArea > div > .card { box-shadow:inset 0 0 0 2px #cdb98c, -3px 2px 8px rgba(0,0,0,.45); }
 @media (max-width: 900px) {
   #me { overflow-y:auto; }
-  .played-zone, .loot-zone { flex:none; }
-  #playArea > div { flex-basis:76px; }
+  .loot-zone { flex:none; }
 }
 .pl { max-width:270px; }
 
@@ -388,12 +380,9 @@ table.score td:first-child, table.score th:first-child { text-align:left; font-f
 @media (min-width: 901px) {
   #me { height:clamp(230px, 31vh, 300px); max-height:none; }
   #meBottom .zone { min-height:0; }
-  #hand, #playArea { flex:1 1 auto; min-height:0; align-items:stretch; }
+  #hand { flex:1 1 auto; min-height:0; align-items:stretch; }
   #hand > div { height:100%; }
   #hand .card { height:100%; width:auto; max-height:200px; }
-  #playArea > div { flex:0 1 auto; height:100%; max-height:150px; }
-  #playArea > div > .card { height:100%; width:auto; }
-  .played-zone { flex:0 4 auto; max-width:48%; } /* shrinks before the hand does */
 }
 @media (min-width: 901px) {
   #me { height:clamp(240px, 33vh, 310px); }
@@ -401,8 +390,6 @@ table.score td:first-child, table.score th:first-child { text-align:left; font-f
   #status { flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:18px; }
   #resources { flex:none; flex-wrap:nowrap; }
   #actions { flex:0 1 auto; display:flex; gap:6px; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; }
-  #playArea > div { min-width:0; }       /* older cards can tuck fully under newer ones */
-  .played-zone { min-width:0; }
 }
 @media (min-width: 901px) and (max-width: 1599px) {
   .res { padding:0 10px 0 8px; height:36px; }
@@ -421,16 +408,12 @@ table.score td:first-child, table.score th:first-child { text-align:left; font-f
 .pl > div:last-child { min-width:0; }
 #actions button { white-space:nowrap; }
 @media (min-width: 901px) {
-  .played-zone { min-width:116px; }        /* always room for the newest card */
   .loot-zone { flex:0 1 200px; min-width:96px; }
 }
 @media (max-width: 900px) {
   .pl { flex:none; min-width:150px; } /* phones: plaques keep their size and the row scrolls sideways */
 }
-#playArea { gap:0; }
-#playArea > div:not(:last-child) > .card { margin-right:6px; } /* spacing lives inside the wrapper, so it shrinks away when cards stack */
-@media (min-width: 901px) { .played-zone { flex-shrink:30; } .hand-zone { flex:0 1 auto; } }
-@media (min-width: 901px) { .hand-zone { flex:1 1 auto; } .played-zone { max-width:36%; } }
+@media (min-width: 901px) { .hand-zone { flex:1 1 auto; } }
 .botabout { margin:0 0 12px; padding:8px 12px; background:#fff8e6; border-left:4px solid #b99a66; border-radius:4px; font-size:14px; line-height:1.4; color:var(--parch-ink); }
 .botabout b { font-family:var(--caps); font-size:12px; letter-spacing:.5px; margin-right:4px; }
 /* Hand and played cards get an explicit size worked out from the panel height. Sizing them by
@@ -442,9 +425,6 @@ table.score td:first-child, table.score th:first-child { text-align:left; font-f
   #meBottom { container-type:size; }
   #hand > div { --ch:min(200px, calc(100cqh - 46px)); height:var(--ch); width:calc(var(--ch) * 150 / 208); }
   #hand > div > .card { width:100%; height:100%; max-height:none; }
-  #playArea > div { --ch:min(150px, calc(100cqh - 24px)); --cw:calc(var(--ch) * 150 / 208); height:var(--ch); flex:0 1 calc(var(--cw) + 6px); }
-  #playArea > div:last-child { flex:0 0 var(--cw); }
-  #playArea > div > .card { width:var(--cw); height:var(--ch); }
 }
 
 /* ============================================================
@@ -459,7 +439,6 @@ html.dark .card { background:linear-gradient(var(--stone-1), var(--stone-2)); bo
 html.dark .card.playable { border-color:var(--gold); box-shadow:inset 0 0 0 2px var(--stone-line), 0 0 0 2px var(--gold), 0 6px 16px rgba(0,0,0,.6); }
 html.dark .card.playable:hover { box-shadow:inset 0 0 0 2px var(--stone-line), 0 0 0 2px var(--gold), 0 14px 24px rgba(0,0,0,.7); }
 html.dark .modal-box .card { box-shadow:inset 0 0 0 2px var(--stone-line), 0 6px 16px rgba(0,0,0,.5); }
-html.dark #playArea > div > .card { box-shadow:inset 0 0 0 2px var(--stone-line), -3px 2px 8px rgba(0,0,0,.6); }
 html.dark .card .pts, html.dark .pl .nm .g, html.dark .lootlist b { color:var(--stone-gold); }
 html.dark .card .cost { background:var(--stone-edge); box-shadow:inset 0 0 0 1px var(--stone-line); }
 html.dark .card.monster .cost { background:var(--red); }
@@ -495,7 +474,7 @@ html.dark { --card-face:#26212c; --card-frame:#4a4053; --card-edge:#0e0b12; --ca
   box-shadow:inset 0 0 0 3px var(--card-face), inset 0 0 0 4px var(--card-frame), 0 2px 6px rgba(0,0,0,.4); }
 .card.playable, html.dark .card.playable { border-color:var(--gold); box-shadow:inset 0 0 0 3px var(--card-face), inset 0 0 0 4px var(--card-frame), 0 0 0 2px var(--gold), 0 6px 14px rgba(0,0,0,.5); }
 .card.playable:hover, html.dark .card.playable:hover { box-shadow:inset 0 0 0 3px var(--card-face), inset 0 0 0 4px var(--card-frame), 0 0 0 2px var(--gold), 0 12px 20px rgba(0,0,0,.55); }
-.modal-box .card, html.dark .modal-box .card, #playArea > div > .card, html.dark #playArea > div > .card { box-shadow:inset 0 0 0 3px var(--card-face), inset 0 0 0 4px var(--card-frame), -2px 2px 6px rgba(0,0,0,.45); }
+.modal-box .card, html.dark .modal-box .card { box-shadow:inset 0 0 0 3px var(--card-face), inset 0 0 0 4px var(--card-frame), -2px 2px 6px rgba(0,0,0,.45); }
 .card.back, html.dark .card.back { background:repeating-linear-gradient(45deg, #3a2719 0 6px, #2a1b14 6px 12px); border-color:#8c6a3c; box-shadow:inset 0 0 0 3px #1c120c, 0 2px 6px rgba(0,0,0,.4); }
 
 /* title bar: one solid colour per card type, inset inside the frame */
@@ -532,7 +511,6 @@ html.dark { --kw-skill:#7ab8f5; --kw-swords:#ff7d70; --kw-boots:#e8aa5c; --kw-go
 html.dark { --card-border:#7a5f3c; }
 .card, html.dark .card { border:1px solid var(--card-border); border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,.35); }
 .modal-box .card, html.dark .modal-box .card { box-shadow:0 1px 3px rgba(0,0,0,.25); }
-#playArea > div > .card, html.dark #playArea > div > .card { box-shadow:-2px 1px 4px rgba(0,0,0,.45); }
 .card.back, html.dark .card.back { border:1px solid #8c6a3c; box-shadow:inset 0 0 0 3px #1c120c, 0 1px 3px rgba(0,0,0,.35); }
 .card.playable, html.dark .card.playable { border-color:var(--gold); box-shadow:0 0 0 1px var(--gold), 0 0 10px rgba(227,168,58,.35); }
 .card.playable:hover, html.dark .card.playable:hover { box-shadow:0 0 0 1px var(--gold), 0 8px 16px rgba(0,0,0,.5), 0 0 14px rgba(227,168,58,.45); }
@@ -561,3 +539,14 @@ html.dark { --card-border:#7a5f3c; }
 .pcard.empty { border:1px dashed var(--card-border); }
 .pile.trash, .pile.trash:hover:not(:disabled) { height:64px; justify-content:center; padding:4px 3px; border:1px solid var(--card-border); border-radius:4px; background:rgba(0,0,0,.25); writing-mode:vertical-rl; font-size:11px; }
 .pile.trash:hover:not(:disabled) { border-color:var(--gold); color:var(--text); }
+
+/* play-area pile: count badge when more than one card is down */
+.pcard em { position:absolute; right:-6px; bottom:-6px; font-style:normal; font-family:var(--caps); font-size:10px; font-weight:800; background:var(--gold); color:#2a1708; border-radius:999px; min-width:17px; height:17px; display:flex; align-items:center; justify-content:center; padding:0 4px; }
+@media (min-width: 901px) { .loot-zone { flex:0 1 270px; } }
+
+/* pile dialog: just the cards in one pile */
+.pilebox { width:min(860px, 100%); }
+.pilebox h3 { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.pilebox h3 small { font-family:var(--body); font-size:13px; font-weight:normal; color:var(--parch-muted); margin-left:8px; }
+#pileBody .cards { gap:10px; }
+#pileBody .card { --w:128px; font-size:11px; }

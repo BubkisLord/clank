@@ -119,13 +119,14 @@ function leaveGame() {
 let resultsDismissed = false;
 function closeModal(id) {
   if (id === 'viewer') $('viewer').classList.add('hidden');
+  else if (id === 'pileView') { $('pileView').classList.add('hidden'); pileOpen = null; }
   else if (id === 'prompt') { if (isMyTurn() && state.pending) act({ type: 'defer' }); }
   else if (id === 'results') { resultsDismissed = true; $('results').classList.add('hidden'); }
 }
-for (const id of ['viewer', 'prompt', 'results']) $(id).addEventListener('click', (e) => { if (e.target === $(id)) closeModal(id); });
+for (const id of ['viewer', 'pileView', 'prompt', 'results']) $(id).addEventListener('click', (e) => { if (e.target === $(id)) closeModal(id); });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  for (const id of ['viewer', 'results', 'prompt']) if (!$(id).classList.contains('hidden')) return closeModal(id);
+  for (const id of ['pileView', 'viewer', 'results', 'prompt']) if (!$(id).classList.contains('hidden')) return closeModal(id);
 });
 $('leaveBtn').onclick = leaveGame;
 $('resultsClose').onclick = () => closeModal('results');
@@ -239,6 +240,7 @@ function render() {
   }
   $('waiting').classList.add('hidden'); $('game').classList.remove('hidden');
   renderPlayers(); renderDragon(); renderBoard(); renderRow(); renderReserve(); renderMarket(); renderLog(); renderMe(); renderPrompt(); renderResults(); announce();
+  if (pileOpen) { const pp = state.players.find((x) => x.id === pileOpen.pid); if (pp) showPile(pp, pileOpen.which); }
   if (!$('viewer').classList.contains('hidden')) { // keep an open player sheet live
     const box = $('viewer').querySelector('.modal-box'), y = box.scrollTop;
     const vp = state.players.find((x) => x.id === $('viewer').dataset.pid);
@@ -268,6 +270,29 @@ function renderPlayers() {
 }
 
 // ---------- card viewer (deck is alphabetical; discard in play order, newest first) ----------
+// one pile in a small dialog: deck (alphabetical), discard (newest first), trashed, or this turn's play area
+let pileOpen = null;
+function showPile(p, which) {
+  const whose = p.id === me ? 'Your' : `${esc(p.name)}'s`;
+  const P = {
+    deck: ['deck', p.deck, true, 'shown alphabetically, not in draw order'],
+    discard: ['discard pile', [...p.discard].reverse(), false, 'newest first'],
+    trashed: ['trashed cards', p.trashed, true, 'removed from the game'],
+    played: ['play area', p.playArea, false, 'played this turn, in order'],
+  }[which];
+  const [name, cards, grouped, note] = P;
+  const box = $('pileView').querySelector('.modal-box'), y = box.scrollTop;
+  $('pileTitle').innerHTML = `<span>${whose} ${name} <small>${plural(cards.length, 'card')} · ${note}</small></span><button id="pileClose" class="defer">✕ Close</button>`;
+  $('pileBody').innerHTML = cards.length
+    ? `<div class="cards">${grouped ? groupCards(cards).map((g) => cardHTML(g.def, { count: g.n > 1 ? g.n : undefined })).join('') : cards.map((c) => cardHTML(cdef(c))).join('')}</div>`
+    : '<p class="muted">No cards here.</p>';
+  $('pileClose').onclick = () => closeModal('pileView');
+  const reopen = pileOpen && pileOpen.pid === p.id && pileOpen.which === which;
+  pileOpen = { pid: p.id, which };
+  $('pileView').classList.remove('hidden');
+  box.scrollTop = reopen ? y : 0;
+}
+
 function groupCards(cards) {
   const m = new Map();
   for (const c of cards) { const d = cdef(c); const g = m.get(d.id) || { def: d, n: 0 }; g.n++; m.set(d.id, g); }
@@ -486,20 +511,24 @@ function ghost(el) {
   document.body.append(g);
   return { g, r };
 }
-// bought cards fly into your discard pile, which gives a little bump when they land
-function flyToDiscard(el) {
-  const target = $('pileDiscard');
-  if (!target || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+// bought cards fly into your discard pile (played cards into the play pile), which bumps when they land
+let flying = 0;
+const lastPlayCount = { pid: null, n: 0 };
+const flyToDiscard = (el) => flyTo(el, 'pileDiscard', 650);
+function flyTo(el, targetId, ms, delay = 0) {
+  const target = $(targetId);
+  if (!el || !target || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const { g, r } = ghost(el), t = target.getBoundingClientRect();
-  holdFor(650);
+  holdFor(ms + delay);
+  flying++;
   const dx = t.left + t.width / 2 - (r.left + r.width / 2), dy = t.top + t.height / 2 - (r.top + r.height / 2), sc = t.width / r.width;
   g.animate([
     { transform: 'none', offset: 0 },
     { transform: 'translate(0, -18px) scale(1.06) rotate(-2deg)', offset: 0.18 },
     { transform: `translate(${dx}px, ${dy}px) scale(${sc}) rotate(8deg)`, opacity: 0.9, offset: 1 },
-  ], { duration: 650, easing: 'cubic-bezier(.5,0,.3,1)' }).onfinish = () => {
-    g.remove();
-    setTimeout(() => $('pileDiscard')?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.12)' }, { transform: 'scale(1)' }], { duration: 260, easing: 'ease-out' }), 30);
+  ], { duration: ms, delay, easing: 'cubic-bezier(.5,0,.3,1)', fill: 'backwards' }).onfinish = () => {
+    g.remove(); flying--;
+    setTimeout(() => $(targetId)?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.12)' }, { transform: 'scale(1)' }], { duration: 260, easing: 'ease-out' }), 30);
   };
 }
 // reshuffle: a few cards lift off the discard pile, flip face down and drop onto the deck, which then riffles
@@ -608,7 +637,7 @@ function renderMe() {
   if (state.phase === 'ended') a += `<button id="showResults" class="primary">📜 Results</button><button id="leaveEnded">Back to the tavern</button>`;
   $('actions').innerHTML = a;
   $('actions').querySelectorAll('[data-resume]').forEach((b) => { b.onclick = () => act({ type: 'resume', index: Number(b.dataset.resume) }); });
-  if ($('playAll')) $('playAll').onclick = () => act({ type: 'playAll' });
+  if ($('playAll')) $('playAll').onclick = () => { [...$('hand').querySelectorAll('.card')].forEach((c, i) => flyTo(c, 'pilePlay', 420, i * 70)); act({ type: 'playAll' }); };
   if ($('takeArt')) $('takeArt').onclick = () => act({ type: 'takeArtifact' });
   if ($('tpMode')) $('tpMode').onclick = () => { teleportMode = !teleportMode; render(); };
   if ($('viewToggle')) $('viewToggle').onclick = () => { viewOwn = !viewOwn; render(); };
@@ -621,17 +650,14 @@ function renderMe() {
   };
   const who = watching ? `${esc(cur.name)}'s` : 'Your';
   document.querySelector('.hand-zone h4').innerHTML = `${who} hand`;
-  document.querySelector('.played-zone h4').innerHTML = watching ? `${who} play area` : 'Played';
   document.querySelector('.loot-zone h4').innerHTML = `${who} loot`;
   // switching between your hand and someone else's should deal the new hand in
   if ($('hand').dataset.viewing !== v.id) { seenUids.hand = new Set(); seenUids.playArea = new Set(); $('hand').dataset.viewing = v.id; }
   const hand = v.hand || [];
   $('hand').innerHTML = hand.map((c) => `<div data-play="${c.uid}" data-uid="${c.uid}">${cardHTML(cdef(c), { playable: mine && !state.pending })}</div>`).join('')
     || `<span class="muted">${mine ? 'All cards played — spend your resources, then end your turn.' : watching ? `${esc(cur.name)} has played every card.` : 'Waiting for your next hand.'}</span>`;
-  if (mine) $('hand').querySelectorAll('[data-play]').forEach((d) => { d.onclick = () => { if (!state.pending) act({ type: 'play', uid: d.dataset.play }); }; });
+  if (mine) $('hand').querySelectorAll('[data-play]').forEach((d) => { d.onclick = () => { if (state.pending) return; flyTo(d.querySelector('.card'), 'pilePlay', 420); act({ type: 'play', uid: d.dataset.play }); }; });
   animateNew($('hand'), 'hand');
-  $('playArea').innerHTML = v.playArea.map((c) => `<div data-uid="${c.uid}">${cardHTML(cdef(c))}</div>`).join('') || '<span class="muted">nothing yet</span>';
-  animateNew($('playArea'), 'playArea');
   const toks = [];
   for (const s of v.secrets) { const d = sdef(s.id); const val = d.points ? ` · ${d.points} pts` : d.gold ? ` · ${d.gold} gold` : ''; toks.push(`<div class="tok" title="${d.text}">${d.name}${val}${d.use === 'held' && mine && !state.pending ? `<button data-use="${s.uid}">Use</button>` : ''}</div>`); }
   for (const x of v.artifacts) toks.push(`<div class="tok">🏺 Artifact ${x}</div>`);
@@ -641,15 +667,22 @@ function renderMe() {
   for (const c of v.items.crowns) toks.push(`<div class="tok">👑 Crown ${c}</div>`);
   if (v.mastery) toks.push(`<div class="tok">🏅 Mastery (20 pts)</div>`);
   const top = v.discard.length ? cdef(v.discard[v.discard.length - 1]) : null;
+  const lastPlayed = v.playArea.length ? cdef(v.playArea[v.playArea.length - 1]) : null;
+  const faceCls = (d) => `face ${d.reserve ? 'reserve' : d.kind}${d.tags.includes('gem') ? ' gem' : ''}`;
   const piles = `<div class="piles">
+    <button class="pile" id="pilePlay" title="Play area: ${plural(v.playArea.length, 'card')} played this turn. Click to see them."><span class="pcard ${lastPlayed ? faceCls(lastPlayed) : 'empty'}">${lastPlayed ? `<i>${esc(lastPlayed.name)}</i>` : ''}${v.playArea.length > 1 ? `<em>${v.playArea.length}</em>` : ''}</span><span class="pl-l">Played <b>${v.playArea.length}</b></span></button>
     <button class="pile" id="pileDeck" title="Deck: ${plural(v.deckCount, 'card')}. Click to see them (alphabetical)."><span class="pcard back"><img src="assets/dragon.svg" alt=""></span><span class="pl-l">Deck <b>${v.deckCount}</b></span></button>
     <button class="pile" id="pileDiscard" title="Discard pile: ${plural(v.discard.length, 'card')}. Click to see them (newest first)."><span class="pcard ${top ? `face ${top.reserve ? 'reserve' : top.kind}${top.tags.includes('gem') ? ' gem' : ''}` : 'empty'}">${top ? `<i>${esc(top.name)}</i>` : ''}</span><span class="pl-l">Discard <b>${v.discard.length}</b></span></button>
     ${v.trashedCount ? `<button class="pile trash" id="pileTrash" title="${plural(v.trashedCount, 'card')} trashed (removed from the game). Click to see them."><span>Trashed <b>${v.trashedCount}</b></span></button>` : ''}
   </div>`;
   $('tokens').innerHTML = piles + toks.join('');
-  $('pileDeck').onclick = () => showCards(v, 'Deck');
-  $('pileDiscard').onclick = () => showCards(v, 'Discard pile');
-  if ($('pileTrash')) $('pileTrash').onclick = () => showCards(v, 'Trashed');
+  $('pilePlay').onclick = () => showPile(v, 'played');
+  $('pileDeck').onclick = () => showPile(v, 'deck');
+  $('pileDiscard').onclick = () => showPile(v, 'discard');
+  if ($('pileTrash')) $('pileTrash').onclick = () => showPile(v, 'trashed');
+  // someone else's card landed in the play area while we watch: bump the pile
+  if (lastPlayCount.pid === v.id && v.playArea.length > lastPlayCount.n && !(mine && flying)) $('pilePlay').animate([{ transform: 'scale(1)' }, { transform: 'scale(1.12)' }, { transform: 'scale(1)' }], { duration: 260, easing: 'ease-out' });
+  lastPlayCount.pid = v.id; lastPlayCount.n = v.playArea.length;
   // the discard pile was shuffled into the deck since we last looked: animate it
   if (lastShuffles[v.id] !== undefined && v.shuffles > lastShuffles[v.id]) reshuffleFx();
   for (const x of state.players) lastShuffles[x.id] = x.shuffles;

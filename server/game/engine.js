@@ -118,8 +118,9 @@ export class Game {
     }
     if (removed.length) this.log(`Artifacts removed for ${n} players: ${removed.join(', ')}`);
 
-    // players
-    shuffle(this.players);
+    // players: humans in random order, then the bots (also shuffled), so people always play first
+    const humans = shuffle(this.players.filter((p) => !p.bot)), bots = shuffle(this.players.filter((p) => p.bot));
+    this.players.splice(0, this.players.length, ...humans, ...bots);
     this.players.forEach((p, i) => {
       p.color = COLORS[i];
       p.deck = buildStartingDeck();

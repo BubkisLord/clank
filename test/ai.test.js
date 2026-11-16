@@ -92,3 +92,16 @@ test('reckless bots finish games sooner than patient ones', () => {
   };
   assert.ok(rounds('reckless') < rounds('patient'));
 });
+
+test('bots take their turns after every human player', () => {
+  for (let i = 0; i < 20; i++) {
+    const g = new Game('AI');
+    g.addPlayer('Host');
+    g.addPlayer('Bot A', { bot: true });
+    g.addPlayer('Guest');
+    g.addPlayer('Bot B', { bot: true });
+    g.start();
+    assert.deepEqual(g.players.map((p) => !!p.bot), [false, false, true, true]);
+    assert.ok(!g.currentPlayer().bot);
+  }
+});

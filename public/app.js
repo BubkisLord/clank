@@ -65,6 +65,7 @@ function connect() {
       toast('You were removed from the game');
     } else if (msg.type === 'error') {
       toast(msg.message);
+      if (leaving.size) { leaving.clear(); if (state) render(); }
       $('lobbyError').textContent = msg.message;
     }
   };
@@ -515,11 +516,11 @@ function ghost(el) {
 let flying = 0;
 const lastPlayCount = { pid: null, n: 0 };
 const flyToDiscard = (el) => flyTo(el, 'pileDiscard', 650);
-function flyTo(el, targetId, ms, delay = 0) {
+function flyTo(el, targetId, ms, delay = 0, hold = true) {
   const target = $(targetId);
   if (!el || !target || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const { g, r } = ghost(el), t = target.getBoundingClientRect();
-  holdFor(ms + delay);
+  if (hold) holdFor(ms + delay);
   flying++;
   const dx = t.left + t.width / 2 - (r.left + r.width / 2), dy = t.top + t.height / 2 - (r.top + r.height / 2), sc = t.width / r.width;
   g.animate([
@@ -530,6 +531,20 @@ function flyTo(el, targetId, ms, delay = 0) {
     g.remove(); flying--;
     setTimeout(() => $(targetId)?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.12)' }, { transform: 'scale(1)' }], { duration: 260, easing: 'ease-out' }), 30);
   };
+}
+// playing a card: it leaves your hand at once (the rest close up) while a copy flies to the play pile.
+// Updates are not held back for this, so quick plays in a row stay snappy; cards on their way out
+// are left out of the hand until the server confirms (or 3s pass, e.g. if the play was refused).
+const leaving = new Map(); // uid -> time it left the hand
+function playOut(wrap, delay = 0, close = true) {
+  const card = wrap.querySelector('.card');
+  leaving.set(wrap.dataset.uid, Date.now());
+  flyTo(card, 'pilePlay', 420, delay, false);
+  wrap.style.visibility = 'hidden';
+  wrap.style.pointerEvents = 'none';
+  if (!close || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const w = wrap.getBoundingClientRect().width, gap = parseFloat(getComputedStyle(wrap.parentElement).columnGap) || 0;
+  wrap.animate([{ width: `${w}px`, marginRight: '0px' }, { width: '0px', marginRight: `${-gap}px` }], { duration: 220, easing: 'ease-in-out', fill: 'forwards' });
 }
 // reshuffle: a few cards lift off the discard pile, flip face down and drop onto the deck, which then riffles
 function reshuffleFx() {
@@ -637,7 +652,7 @@ function renderMe() {
   if (state.phase === 'ended') a += `<button id="showResults" class="primary">📜 Results</button><button id="leaveEnded">Back to the tavern</button>`;
   $('actions').innerHTML = a;
   $('actions').querySelectorAll('[data-resume]').forEach((b) => { b.onclick = () => act({ type: 'resume', index: Number(b.dataset.resume) }); });
-  if ($('playAll')) $('playAll').onclick = () => { [...$('hand').querySelectorAll('.card')].forEach((c, i) => flyTo(c, 'pilePlay', 420, i * 70)); act({ type: 'playAll' }); };
+  if ($('playAll')) $('playAll').onclick = () => { [...$('hand').querySelectorAll('[data-play]')].forEach((d, i) => playOut(d, i * 70, false)); act({ type: 'playAll' }); };
   if ($('takeArt')) $('takeArt').onclick = () => act({ type: 'takeArtifact' });
   if ($('tpMode')) $('tpMode').onclick = () => { teleportMode = !teleportMode; render(); };
   if ($('viewToggle')) $('viewToggle').onclick = () => { viewOwn = !viewOwn; render(); };
@@ -654,10 +669,12 @@ function renderMe() {
   document.querySelector('.pile-zone h4').innerHTML = `${who} cards`;
   // switching between your hand and someone else's should deal the new hand in
   if ($('hand').dataset.viewing !== v.id) { seenUids.hand = new Set(); seenUids.playArea = new Set(); $('hand').dataset.viewing = v.id; }
-  const hand = v.hand || [];
+  const now = Date.now();
+  for (const [uid, t] of leaving) if (now - t > 3000 || !(v.hand || []).some((c) => c.uid === uid)) leaving.delete(uid);
+  const hand = (v.hand || []).filter((c) => !(mine && leaving.has(c.uid)));
   $('hand').innerHTML = hand.map((c) => `<div data-play="${c.uid}" data-uid="${c.uid}">${cardHTML(cdef(c), { playable: mine && !state.pending })}</div>`).join('')
     || `<span class="muted">${mine ? 'All cards played — spend your resources, then end your turn.' : watching ? `${esc(cur.name)} has played every card.` : 'Waiting for your next hand.'}</span>`;
-  if (mine) $('hand').querySelectorAll('[data-play]').forEach((d) => { d.onclick = () => { if (state.pending) return; flyTo(d.querySelector('.card'), 'pilePlay', 420); act({ type: 'play', uid: d.dataset.play }); }; });
+  if (mine) $('hand').querySelectorAll('[data-play]').forEach((d) => { d.onclick = () => { if (state.pending || leaving.has(d.dataset.uid)) return; playOut(d); act({ type: 'play', uid: d.dataset.play }); }; });
   animateNew($('hand'), 'hand');
   // loot: one row per thing held, with its points, then gold, card points and the total
   const rows = [];

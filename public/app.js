@@ -199,8 +199,8 @@ function render() {
     $('waitCode').textContent = state.code;
     $('shareLink').textContent = `${location.origin}/?g=${state.code}`;
     const host = state.players[0].id === me;
-    $('waitPlayers').innerHTML = state.players.map((p, i) => `<li style="border-color:${COLOR[p.color]}"><span>${p.bot ? '🤖 ' : ''}${esc(p.name)}${i === 0 ? ' <em>host</em>' : ''}${p.id === me ? ' <em>you</em>' : ''}${p.bot ? ` <em>${esc(p.botStyle || 'computer')}</em>` : ''}</span>${host && i > 0 ? `<button class="kick" data-kick="${p.id}" title="Remove ${esc(p.name)} from the game">${p.bot ? 'Remove' : 'Kick'}</button>` : ''}</li>`).join('')
-      + (host && state.players.length < 4 ? `<li class="addbot"><button id="addBot" title="Add a computer-controlled thief">🤖 Add computer player</button></li>` : '');
+    $('waitPlayers').innerHTML = state.players.map((p, i) => `<li style="border-color:${COLOR[p.color]}"><span>${p.bot ? '[BOT] ' : ''}${esc(p.name)}${i === 0 ? ' <em>host</em>' : ''}${p.id === me ? ' <em>you</em>' : ''}${p.bot ? ` <em>${esc(p.botStyle || 'computer')}</em>` : ''}</span>${host && i > 0 ? `<button class="kick" data-kick="${p.id}" title="Remove ${esc(p.name)} from the game">${p.bot ? 'Remove' : 'Kick'}</button>` : ''}</li>`).join('')
+      + (host && state.players.length < 4 ? `<li class="addbot"><button id="addBot" title="Add a computer-controlled player">Add a bot player</button></li>` : '');
     if ($('addBot')) $('addBot').onclick = () => send({ type: 'addBot' });
     $('waitPlayers').querySelectorAll('[data-kick]').forEach((b) => { b.onclick = () => { if (state.players.find((x) => x.id === b.dataset.kick)?.bot) return send({ type: 'kick', playerId: b.dataset.kick }); if (confirm(`Remove ${b.title.replace('Remove ', '').replace(' from the game', '')} from the game?`)) send({ type: 'kick', playerId: b.dataset.kick }); }; });
     $('startBtn').disabled = !host;
@@ -227,16 +227,14 @@ function renderPlayers() {
     const secretIcons = p.secrets.map((sx) => ({ chalice: '🏆', dragon_egg: '🥚', treasure: '💰', greater_treasure: '💰' }[sx.id] || '🧪')).join('');
     const loot = [...p.artifacts.map((a) => `🏺${a}`), p.monkeyIdols ? `🐒${p.monkeyIdols}` : '', p.items.masterKey ? '🔑' : '', p.items.backpack ? '🎒' : '', ...p.items.crowns.map((c) => `👑${c}`), p.mastery ? '🏅' : '', secretIcons].filter(Boolean).join(' ');
     const hp = Array.from({ length: 10 }, (_, i) => `<i class="${i < 10 - p.damage ? '' : 'off'}"></i>`).join('');
-    const cubes = Array.from({ length: Math.min(p.clankArea, 30) }, () => `<i style="background:${COLOR[p.color]}"></i>`).join('');
+    const cubes = Array.from({ length: Math.min(p.clankArea, 8) }, () => `<i style="background:${COLOR[p.color]}"></i>`).join('') + (p.clankArea > 8 ? `<b>+${p.clankArea - 8}</b>` : '');
     const title = `${esc(p.name)}: ${10 - p.damage}/10 health · ${p.clankArea} Clank in the area, ${p.inBag} in the bag, ${p.supply} in supply · deck ${p.deckCount}, hand ${p.handCount}, discard ${p.discard.length}${p.connected ? '' : ' · disconnected'}`;
     return `<div class="pl ${p.id === state.currentPlayer ? 'current' : ''} ${p.status !== 'in' ? 'out' : ''}" title="${title} — click to inspect their cards" data-inspect="${p.id}">
       <div class="av" style="background:${COLOR[p.color]}">${esc(p.name[0].toUpperCase())}</div>
       <div style="min-width:0;flex:1">
-        <div class="nm"><span>${p.bot ? `<span title="Computer player · ${esc(p.botStyle || '')} · ${esc(state.options?.botLevel || 'medium')}">🤖</span>` : ''}${esc(p.name)}${p.id === me ? ' ✦' : ''}${p.connected ? '' : ' ⚠'}</span><span class="g" title="Points if they made it out now">${p.score ?? 0} pts · ${p.gold}g</span></div>
-        <div class="loot">${loot}</div>
-        <div class="hp" title="Health ${10 - p.damage}/10">${hp}</div>
-        <div class="st">${st}${p.onCountdown ? ' · countdown' : ''}</div>
-        <div class="cubes" title="${p.clankArea} Clank! in the area">${cubes}</div>
+        <div class="nm"><span>${p.bot ? `<span class="botic" title="Computer player · ${esc(p.botStyle || '')} · ${esc(state.options?.botLevel || 'medium')}">🤖</span>` : ''}${esc(p.name)}${p.id === me ? ' ✦' : ''}${p.connected ? '' : ' ⚠'}</span><span class="g" title="Points if they made it out now">${p.score ?? 0} pts · ${p.gold}g</span></div>
+        <div class="r2"><div class="hp" title="Health ${10 - p.damage}/10">${hp}</div><div class="loot">${loot}</div></div>
+        <div class="r3"><div class="st">${st}${p.onCountdown ? ' · countdown' : ''}</div><div class="cubes" title="${p.clankArea} Clank! in the area">${cubes}</div></div>
       </div>
     </div>`;
   }).join('');

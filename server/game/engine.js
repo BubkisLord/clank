@@ -115,6 +115,8 @@ export class Game {
     this.customCards = custom;
     if (needsFlooding(this.deck)) { this.board = floodBoard(this.board); this.log('Water has flooded parts of the Depths. Start your turn underwater and you must reach a dry room, or take 1 damage.'); }
     this.dungeonDeck = buildDungeonDeck(list);
+    this.deckCounts = {}; // how many of each card the dungeon deck started with (public: it is the deck list)
+    for (const x of list) this.deckCounts[x.id] = (this.deckCounts[x.id] || 0) + x.qty;
     if (this.deck !== BASE_DECK) this.log(`The dungeon is stocked from the "${this.deck.name}" deck.`);
     this.dungeonRow = [null, null, null, null, null, null];
     this.dungeonDiscard = [];
@@ -739,6 +741,9 @@ export class Game {
       board: this.board.toJSON(),
       dungeonRow: this.dungeonRow.map((c) => (c ? cardView(c) : null)),
       dungeonDeckCount: this.dungeonDeck.length,
+      // what is left in the dungeon deck, as counts only: the order stays secret
+      dungeonLeft: this.dungeonDeck.reduce((m, c) => { m[c.id] = (m[c.id] || 0) + 1; return m; }, {}),
+      dungeonStart: this.deckCounts,
       dungeonDiscardTop: this.dungeonDiscard.length ? cardView(this.dungeonDiscard[this.dungeonDiscard.length - 1]) : null,
       reserve: this.reserve,
       rage: this.rage, rageValue: this.rageValue(), danger: this.dangerCount(),

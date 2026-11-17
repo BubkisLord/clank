@@ -209,6 +209,48 @@ function cardHTML(def, { cost, count, buttons = '', playable = false, small = fa
   </div>`;
 }
 
+// ---------- dungeon deck viewer: which cards are left (counts only; the order stays secret) ----------
+let dlQuery = '', dlGone = false;
+const dlOpen = new Set(); // rows expanded to show their text
+const DL_GROUPS = [['monster', 'Monsters'], ['device', 'Devices'], ['companion', 'Companions & items'], ['gem', 'Gems']];
+const dlKind = (d) => (d.kind === 'companion' && (d.tags || []).includes('gem') ? 'gem' : d.kind);
+function renderDeckList() {
+  if (!$('dlSheet').classList.contains('open') || !state?.dungeonStart) return;
+  const left = state.dungeonLeft || {}, start = state.dungeonStart;
+  const n = (id) => left[id] || 0;
+  const ids = Object.keys(start).filter((id) => STATIC.cards[id]);
+  const sum = (f) => ids.reduce((s, id) => s + (f(STATIC.cards[id]) ? n(id) : 0), 0);
+  $('dlSummary').innerHTML = `<span><b>${state.dungeonDeckCount}</b> left</span><span title="Cards with a dragon symbol: the dragon attacks when one enters the row"><img src="assets/dragon.svg" alt="Dragon symbols"> <b>${sum((d) => d.dragon)}</b></span><span title="Danger cards: each makes dragon attacks draw an extra cube">☠ <b>${sum((d) => d.danger)}</b></span>`;
+  const match = (id) => { const d = STATIC.cards[id]; return (dlGone || n(id)) && (!dlQuery || `${d.name} ${d.text}`.toLowerCase().includes(dlQuery)); };
+  const row = (id) => {
+    const d = STATIC.cards[id], open = dlOpen.has(id);
+    const cost = d.kind === 'monster' ? `⚔ ${d.swords}` : `${d.cost}`;
+    return `<button class="dl-row ${n(id) ? '' : 'gone'} ${open ? 'open' : ''}" data-id="${esc(id)}" aria-expanded="${open}">
+      <span class="dl-n">${n(id)}<small>/${start[id]}</small></span>
+      <span class="dl-name">${esc(d.name)}${open ? `<span class="dl-text">${richText(d.text)}</span>` : ''}</span>
+      <span class="dl-ic">${d.dragon ? '<img src="assets/dragon.svg" alt="Dragon" title="Dragon symbol">' : ''}${d.danger ? '<i title="Danger">☠</i>' : ''}<span class="dl-cost ${d.kind}" title="${d.kind === 'monster' ? 'Swords to defeat' : 'Skill cost'}">${cost}</span></span>
+    </button>`;
+  };
+  const html = DL_GROUPS.map(([k, label]) => {
+    const list = ids.filter((id) => dlKind(STATIC.cards[id]) === k && match(id)).sort((a, b) => STATIC.cards[a].name.localeCompare(STATIC.cards[b].name));
+    if (!list.length) return '';
+    const total = list.reduce((s, id) => s + n(id), 0);
+    return `<section class="dl-group"><h4>${label} <span class="muted">${total}</span></h4><div class="dl-rows">${list.map(row).join('')}</div></section>`;
+  }).join('');
+  $('dlList').innerHTML = html || '<p class="muted dl-empty">No cards match.</p>';
+}
+function openDeckList(open) {
+  $('dlSheet').classList.toggle('open', open);
+  document.body.classList.toggle('dl-open', open);
+  if (open) renderDeckList();
+}
+$('deckInfo').onclick = () => openDeckList(true);
+$('dlClose').onclick = $('dlBackdrop').onclick = () => openDeckList(false);
+$('dlList').onclick = (e) => { const r = e.target.closest('[data-id]'); if (!r) return; const id = r.dataset.id; if (dlOpen.has(id)) dlOpen.delete(id); else dlOpen.add(id); renderDeckList(); };
+$('dlSearch').oninput = (e) => { dlQuery = e.target.value.trim().toLowerCase(); renderDeckList(); };
+$('dlGone').onchange = (e) => { dlGone = e.target.checked; renderDeckList(); };
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('dlSheet').classList.contains('open') && !confirmDone) { e.stopPropagation(); openDeckList(false); } });
+
 // ---------- render ----------
 // Dragon attacks are numbered by the server; every one newer than the last we saw gets a banner,
 // queued so two attacks in one update both show.
@@ -495,6 +537,7 @@ function renderHud(moves, tele) {
 function renderRow() {
   const L = state.legal;
   $('deckInfo').textContent = `(${state.dungeonDeckCount} in deck)`;
+  renderDeckList();
   $('dungeonRow').innerHTML = state.dungeonRow.map((c, i) => {
     if (!c) return '<div class="card empty"></div>';
     const d = cdef(c);

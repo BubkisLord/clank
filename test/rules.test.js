@@ -344,3 +344,26 @@ test('flooded rooms: swimming costs 2 boots, and staying under all turn costs 1 
   g.act(p.id, { type: 'endTurn' });
   assert.equal(p.damage, dmg + 1);
 });
+
+test('players see what is left in the Dungeon Deck as counts, never the order', () => {
+  const g = setup();
+  const s = g.stateFor(g.players[0].id);
+  assert.equal(Object.values(s.dungeonLeft).reduce((a, b) => a + b, 0), s.dungeonDeckCount);
+  assert.equal(Object.values(s.dungeonStart).reduce((a, b) => a + b, 0), 100);
+  assert.ok(!('dungeonDeck' in s));
+  for (const [id, n] of Object.entries(s.dungeonLeft)) assert.ok(n <= s.dungeonStart[id], id);
+});
+
+test('"choose two" asks twice and never offers the same option again (Wishing Well)', () => {
+  const g = setup();
+  const p = cur(g);
+  g.queueFront(p, def({ id: 'wishing_well' }).use, null);
+  g.process();
+  assert.equal(g.pending.options.length, 4);
+  resolve(g, (o) => o.label === '+2 Boots');
+  assert.equal(g.pending.options.length, 3);
+  assert.ok(!g.pending.options.some((o) => o.label === '+2 Boots'));
+  resolve(g, (o) => o.label === '+2 Swords');
+  assert.equal(g.pending, null);
+  assert.equal(g.turn.boots, 2); assert.equal(g.turn.swords, 2);
+});

@@ -724,3 +724,42 @@ html:not(.dark) .ws-edhead .defer { color:var(--parch-ink); }
   .ws-preview .card .banner { font-size:16px; }
 }
 .hud .m.air { color:#8fe3f0; font-weight:600; }
+
+/* dungeon deck viewer: a slide-up sheet listing what is left in the Dungeon Deck */
+.deck-link { background:none; border:none; box-shadow:none; padding:0 2px; font:inherit; font-size:13px; color:var(--muted); text-decoration:underline dotted; text-underline-offset:3px; cursor:pointer; }
+.deck-link:hover, .deck-link:focus-visible { color:var(--gold); }
+#dlSheet { position:fixed; left:50%; bottom:0; width:min(1100px, 94vw); height:84dvh; z-index:60; background:var(--ink-2); display:flex; flex-direction:column; gap:14px;
+  border:2px solid var(--gold-2); border-bottom:none; border-radius:14px 14px 0 0; box-shadow:0 -20px 60px rgba(0,0,0,.6); padding:16px 24px calc(16px + env(safe-area-inset-bottom));
+  transform:translate(-50%, 102%); visibility:hidden; transition:transform .24s ease-out, visibility 0s linear .24s; }
+#dlSheet.open { transform:translate(-50%, 0); visibility:visible; transition:transform .24s ease-out; }
+#dlBackdrop { position:fixed; inset:0; z-index:59; background:rgba(5,3,8,.55); opacity:0; pointer-events:none; transition:opacity .24s; }
+body.dl-open #dlBackdrop { opacity:1; pointer-events:auto; }
+.dl-head { display:flex; align-items:center; gap:18px; }
+.dl-head h3 { margin:0; color:var(--gold); }
+.dl-head .defer { margin-left:auto; color:var(--text); }
+.dl-chips { display:flex; gap:16px; color:var(--muted); font-size:14px; }
+.dl-chips span { display:inline-flex; align-items:center; gap:5px; }
+.dl-chips b { color:var(--text); font-size:16px; }
+.dl-chips img, .dl-ic img { width:15px; height:15px; }
+.dl-tools { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+#dlSearch { flex:0 1 260px; padding:7px 11px; font-size:14px; }
+.dl-note { margin-left:auto; font-size:12.5px; font-style:italic; }
+#dlList { flex:1 1 0; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:20px; padding-right:4px; }
+.dl-group h4 { margin:0 0 8px; font-family:var(--caps); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; color:var(--gold); border-bottom:1px solid #3a2a1e; padding-bottom:5px; }
+.dl-rows { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:2px 18px; }
+.dl-row { display:flex; align-items:flex-start; gap:10px; width:100%; text-align:left; background:none; border:none; box-shadow:none; border-radius:6px; padding:6px 8px; color:var(--text); font:inherit; font-size:14px; cursor:pointer; }
+.dl-row:hover, .dl-row.open { background:rgba(255,255,255,.05); filter:none; }
+.dl-n { min-width:30px; font-weight:700; font-size:15px; color:var(--text); }
+.dl-n small { font-weight:400; font-size:11px; color:var(--dim); }
+.dl-name { flex:1; display:flex; flex-direction:column; gap:4px; }
+.dl-text { font-size:12.5px; line-height:1.35; color:var(--muted); }
+.dl-ic { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; }
+.dl-ic i { font-style:normal; }
+.dl-cost { min-width:28px; text-align:right; color:var(--dim); font-size:12.5px; }
+.dl-row.gone { opacity:.4; }
+.dl-empty { text-align:center; margin-top:30px; }
+html:not(.dark) #dlSheet { background:#efe3c6; }
+html:not(.dark) .dl-row:hover, html:not(.dark) .dl-row.open { background:rgba(0,0,0,.05); }
+@media (max-width: 700px) { #dlSheet { width:100vw; height:90dvh; padding-left:14px; padding-right:14px; border-left:none; border-right:none; } #dlSearch { flex:1 1 100%; } .dl-note { margin-left:0; } .dl-head { flex-wrap:wrap; gap:10px 16px; } }
+@media (prefers-reduced-motion: reduce) { #dlSheet { transition:none; } }
+.ws-optrow .ws-chk, .ws-optrow label { white-space:nowrap; }

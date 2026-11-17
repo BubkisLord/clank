@@ -48,6 +48,8 @@ const ORDER = ['skill', 'swords', 'boots', 'gold', 'heal', 'clank', 'draw', 'tel
 // which effect lists each kind of card may have
 const SLOTS = { companion: ['play', 'acquire', 'arrive', 'discard'], device: ['use', 'acquire', 'arrive'], monster: ['defeat', 'arrive'] };
 
+// "choose N": how many different options the player picks (1 if absent); always fewer than the options
+const pickCount = (e, opts, where) => (e.pick == null ? 1 : int(e.pick, 1, Math.min(3, opts.length - 1), `${where}: number of options to pick`));
 const int = (v, lo, hi, what) => {
   const n = Number(v);
   if (!Number.isInteger(n) || n < lo || n > hi) bad(`${what} must be a whole number from ${lo} to ${hi}`);
@@ -69,7 +71,7 @@ export function cleanEffects(list, where, depth = 0) {
   const out = [];
   for (const e of list) {
     if (!e || typeof e !== 'object' || Array.isArray(e)) bad(`${where}: every effect must be an object`);
-    for (const k of Object.keys(e)) if (!ORDER.includes(k) && !(k === 'effects' && 'when' in e)) bad(`${where}: unknown effect "${k}"`);
+    for (const k of Object.keys(e)) if (!ORDER.includes(k) && !(k === 'effects' && 'when' in e) && !(k === 'pick' && 'choose' in e)) bad(`${where}: unknown effect "${k}"`);
     for (const k of ORDER) {
       if (!(k in e)) continue;
       const v = e[k];
@@ -96,7 +98,7 @@ export function cleanEffects(list, where, depth = 0) {
           if (o?.requires?.gold) opt.requires = { gold: int(o.requires.gold, 1, 20, `${where}: option ${i + 1} gold cost`) };
           if (o?.requires?.flooded) opt.requires = { ...opt.requires, flooded: true };
           return opt;
-        }) });
+        }), ...(pickCount(e, v, where) > 1 ? { pick: pickCount(e, v, where) } : {}) });
       } else if (k === 'discardThen') out.push({ discardThen: cleanEffects(v, `${where} (after discarding)`, depth + 1) });
       else if (k === 'trash') {
         const from = Array.isArray(v?.from) ? v.from.filter((z) => ZONES.includes(z)) : [];

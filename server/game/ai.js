@@ -81,7 +81,7 @@ function effectValue(list, ctx) {
         if (typeof e === 'function' || e.fn) { v += 1; continue; }
         v += (e.skill || 0) * 1 + (e.swords || 0) * 0.85 + (e.boots || 0) * ctx.bootW + (e.gold || 0) * (ctx.goldW ?? 0.6)
             + (e.draw || 0) * ctx.drawW - (e.clank || 0) * ctx.clankW + (e.heal || 0) * ctx.healW + (e.teleport || 0) * 1.5;
-        if (e.choose) v += Math.max(...e.choose.map((o) => effectValue(o.effects, ctx)));
+        if (e.choose) v += e.choose.map((o) => effectValue(o.effects, ctx)).sort((a, b) => b - a).slice(0, e.pick || 1).reduce((s, x) => s + x, 0);
         if (e.when) v += 0.5 * effectValue(e.effects, ctx);
         if (e.discardThen) v += effectValue(e.discardThen, ctx) - 0.9;
         if (e.trash) v += 0.6;

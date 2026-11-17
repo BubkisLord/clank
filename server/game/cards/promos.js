@@ -12,8 +12,8 @@ export default [
     text: 'Draw a card. -1 Clank!. Acquire: +3 Clank!', play: [{ draw: 1, clank: -1 }], acquire: [{ clank: 3 }] },
   { id: 'siren', name: 'Siren', kind: 'companion', tags: ['companion'], set: 'promo', qty: 1, cost: 3, points: 2,
     text: '+2 Skill. Acquire a Companion from the Dungeon Row for free.', play: [{ skill: 2 }, { freeAcquire: { max: 20, tag: 'companion' } }] },
-  { id: 'wishing_well', name: 'Wishing Well', kind: 'device', set: 'promo', qty: 1, cost: 6, text: 'Use: choose two: trash a card, +2 Swords, +2 Boots, or heal 1.',
-    use: [0, 1].map(() => ({ choose: [
+  { id: 'wishing_well', name: 'Wishing Well', kind: 'device', set: 'promo', qty: 1, cost: 6, text: 'Use: choose two different: trash a card, +2 Swords, +2 Boots, or heal 1.',
+    use: [{ pick: 2, choose: [
       { label: 'Trash a card', effects: [{ trash: { from: ['hand', 'playArea', 'discard'], optional: true } }] },
-      { label: '+2 Swords', effects: [{ swords: 2 }] }, { label: '+2 Boots', effects: [{ boots: 2 }] }, { label: 'Heal 1', effects: [{ heal: 1 }] }] })) },
+      { label: '+2 Swords', effects: [{ swords: 2 }] }, { label: '+2 Boots', effects: [{ boots: 2 }] }, { label: 'Heal 1', effects: [{ heal: 1 }] }] }] },
 ];

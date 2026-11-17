@@ -163,3 +163,12 @@ test('the deck store saves, lists, loads and deletes decks; the base deck is rea
   store.deleteDeck(saved.id);
   assert.equal(store.getDeck(saved.id), null);
 });
+
+test('"choose N" is validated: fewer picks than options, at most three', () => {
+  const opts = (n) => Array.from({ length: n }, (_, i) => ({ label: `O${i}`, effects: [{ gold: 1 }] }));
+  const card = (choose, pick) => ({ id: 'x', name: 'X', kind: 'companion', cost: 1, play: [{ choose, pick }] });
+  assert.deepEqual(cleanCard(card(opts(4), 2)).play[0].pick, 2);
+  assert.equal(cleanCard(card(opts(3), 1)).play[0].pick, undefined);
+  assert.throws(() => cleanCard(card(opts(2), 2)), DeckError);
+  assert.throws(() => cleanCard(card(opts(4), 4)), DeckError);
+});

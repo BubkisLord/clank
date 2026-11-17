@@ -67,11 +67,15 @@ export function applyEffect(game, p, e, card) {
     const opts = e.choose.filter((o) => !o.requires || ((o.requires.gold == null || p.gold >= o.requires.gold) && (!o.requires.flooded || flooded)));
     for (const o of e.choose) if (!opts.includes(o)) game.log(o.requires.flooded && !flooded ? `"${o.label}" needs a flooded room` : `${p.name} cannot afford "${o.label}" (${p.gold}/${o.requires.gold} gold)`);
     if (opts.length === 0) return;
-    if (opts.length === 1) return game.queueFront(p, opts[0].effects, card);
+    const pick = e.pick || 1;
+    if (opts.length <= pick) return game.queueFront(p, opts.flatMap((o) => o.effects), card); // nothing to choose: take them all
+    // choose N: after each pick, the rest of the options come back with one fewer to pick
+    const then = (v) => game.queueFront(p, [...opts[v].effects, ...(pick > 1 ? [{ choose: opts.filter((_, i) => i !== v), pick: pick - 1 }] : [])], card);
+    if (opts.length === 1) return then(0);
     game.prompt(p, {
-      title: `${card ? def(card).name : 'Choose'}: choose one`,
+      title: `${card ? def(card).name : 'Choose'}: ${pick > 1 ? `choose ${pick} more` : 'choose one'}`,
       options: opts.map((o, i) => ({ label: o.label, value: i })),
-    }, (v) => game.queueFront(p, opts[v].effects, card));
+    }, then);
   }
 
   if (e.discardThen) {

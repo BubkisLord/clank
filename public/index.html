@@ -108,7 +108,7 @@
         <div id="boardScroll"><svg id="board" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet"></svg></div>
       </div>
       <aside id="side" class="pane tab-dungeon">
-        <div class="ph"><h3>Dungeon Row</h3><span id="deckInfo" class="muted"></span></div>
+        <div class="ph"><h3>Dungeon Row</h3><button id="deckInfo" class="deck-link" title="See which cards are left in the Dungeon Deck"></button></div>
         <div id="dungeonRow" class="cards"></div>
         <div class="ph"><h3>Reserve</h3></div>
         <div id="reserve" class="cards"></div>
@@ -145,6 +145,15 @@
   </section>
 </div>
 <div id="confirm" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirmText"><div class="modal-box confirm-box"><p id="confirmText"></p><div class="confirm-btns"><button id="confirmNo" class="defer">Cancel</button><button id="confirmYes" class="primary">OK</button></div></div></div>
+<div id="dlBackdrop"></div>
+<aside id="dlSheet" aria-label="Cards left in the Dungeon Deck">
+  <div class="dl-head">
+    <h3>Dungeon Deck</h3><div id="dlSummary" class="dl-chips"></div>
+    <button class="defer" id="dlClose" title="Close (Esc)">✕</button>
+  </div>
+  <div class="dl-tools"><input id="dlSearch" type="search" placeholder="Search cards…" aria-label="Search cards"><label class="ws-chk"><input type="checkbox" id="dlGone"> Show cards already out</label><span class="muted dl-note">Shuffled: the order is hidden</span></div>
+  <div id="dlList"></div>
+</aside>
 <script src="app.js"></script>
 <script src="decks.js"></script>
 <script>

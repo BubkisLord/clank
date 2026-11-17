@@ -7,7 +7,7 @@
     ['Move', [['teleport', 'Teleport'], ['flag:ignoreMonsterTunnels', 'Ignore monsters in tunnels'], ['flag:ignoreCrystalCaves', 'No stopping in Crystal Caves'], ['flag:waterBreathing', 'Breathe underwater this turn']]],
     ['Others & dragon', [['othersClank', 'Each other player adds Clank!'], ['allClank', 'Every player adds Clank!'], ['dragonAttack', 'Dragon attack'], ['returnDragonCubes', 'Return set-aside dragon cubes (up to)'], ['rage', 'Move the Dragon marker (negative moves down)']]],
     ['Cards', [['trash', 'Trash a card'], ['discardThen', 'Discard a card, then…'], ['replaceRow', 'Replace a Dungeon Row card'], ['gemDiscount', 'Gems cost less this turn'], ['goldBonus', 'Extra gold each time you gain gold'], ['buyTomes', 'Pay gold for Secret Tomes'], ['takeAdjacentSecret', 'Take a secret from an adjacent room'], ['freeAcquire', 'Acquire a row card for free'], ['returnToHand', 'Return this card to your hand']]],
-    ['Logic', [['choose', 'Choose one…'], ['when', 'If…, then'], ['skillPerClank', '+1 Skill per Clank! this turn']]],
+    ['Logic', [['choose', 'Choose…'], ['when', 'If…, then'], ['skillPerClank', '+1 Skill per Clank! this turn']]],
   ];
   const TYPE_LABEL = Object.fromEntries(TYPES.flatMap(([, l]) => l));
   const ORDER = ['skill', 'swords', 'boots', 'gold', 'heal', 'clank', 'draw', 'teleport', 'dragonAttack', 'othersClank', 'allClank', 'flag', 'gemDiscount', 'goldBonus', 'returnDragonCubes', 'rage', 'skillPerClank', 'buyTomes', 'freeAcquire', 'when', 'choose', 'discardThen', 'trash', 'replaceRow', 'takeAdjacentSecret', 'returnToHand'];
@@ -38,7 +38,7 @@
     for (const e of list || []) for (const k of ORDER) {
       if (!(k in e)) continue;
       if (k === 'when') out.push({ when: e.when, effects: atoms(e.effects) });
-      else if (k === 'choose') out.push({ choose: e.choose.map((o) => ({ ...o, effects: atoms(o.effects) })) });
+      else if (k === 'choose') out.push({ choose: e.choose.map((o) => ({ ...o, effects: atoms(o.effects) })), ...(e.pick > 1 ? { pick: e.pick } : {}) });
       else if (k === 'discardThen') out.push({ discardThen: atoms(e.discardThen) });
       else out.push({ [k]: e[k] });
     }
@@ -77,7 +77,7 @@
       case 'buyTomes': return `Pay ${e.buyTomes.gold} Gold to gain ${e.buyTomes.count === 1 ? 'a Secret Tome' : `${e.buyTomes.count} Secret Tomes`}`;
       case 'trash': return `${e.trash.optional ? 'You may trash' : 'Trash'} ${e.trash.match ? `a ${cardName(e.trash.match)}` : 'a card'}`;
       case 'discardThen': return `Discard a card to: ${phrase(e.discardThen)}`;
-      case 'choose': return `Choose one: ${e.choose.map((o) => o.label + (o.requires?.flooded ? ' (in a flooded room)' : '')).join(', or ')}`;
+      case 'choose': return `Choose ${e.pick > 1 ? `${NUMBER[e.pick]} different` : 'one'}: ${e.choose.map((o) => o.label + (o.requires?.flooded ? ' (in a flooded room)' : '')).join(', or ')}`;
       case 'when': {
         const c = condKey(e.when);
         const what = c === 'inPlayOrDiscard' ? `a ${cardName(e.when.inPlayOrDiscard)} is in your play area or discard pile` : CONDS.find(([k]) => k === c)?.[1] || '…';
@@ -86,6 +86,7 @@
       default: return '';
     }
   }
+  const NUMBER = { 1: 'one', 2: 'two', 3: 'three' };
   const phrase = (list) => (list || []).map(say).filter(Boolean).join('. ') || 'nothing';
   const sentence = (list) => { const p = (list || []).map(say).filter(Boolean).join('. '); return p ? p + '.' : ''; };
   const PLACES = [['', 'Anywhere'], ['depths', 'Only in the Depths'], ['crystal', 'Only in a Crystal Cave']];
@@ -415,11 +416,13 @@
       nested = `<div class="ws-nest"><span class="ws-nl">then</span>${effectList(e.effects, dis)}</div>`;
     } else if (t === 'discardThen') nested = `<div class="ws-nest"><span class="ws-nl">after discarding</span>${effectList(e.discardThen, dis)}</div>`;
     else if (t === 'choose') {
+      const most = Math.min(3, e.choose.length - 1);
+      params = `<label title="How many different options the player picks">pick <select data-ref="${r}" data-act="pick" ${dis}>${[1, 2, 3].filter((n) => n <= most).map((n) => `<option value="${n}" ${(e.pick || 1) === n ? 'selected' : ''}>${NUMBER[n]}</option>`).join('')}</select> of these</label>`;
       nested = `<div class="ws-nest">${e.choose.map((o, j) => {
         const or = refs.push({ list, i, j }) - 1;
         return `<div class="ws-opt"><div class="ws-optrow"><span class="ws-nl">option ${j + 1}</span><input data-ref="${or}" data-act="label" maxlength="40" value="${esc(o.label)}" ${dis} aria-label="Option label">
           <label title="Only offered if the player has this much gold">needs gold <input type="number" data-ref="${or}" data-act="needGold" value="${o.requires?.gold || 0}" min="0" max="20" ${dis}></label>
-          <label class="ws-chk" title="Only offered in a flooded room"><input type="checkbox" data-ref="${or}" data-act="needWater" ${o.requires?.flooded ? 'checked' : ''} ${dis}> flooded room only</label>
+          <label class="ws-chk" title="Only offered in a flooded room"><input type="checkbox" data-ref="${or}" data-act="needWater" ${o.requires?.flooded ? 'checked' : ''} ${dis}> flooded only</label>
           ${dis || e.choose.length <= 2 ? '' : `<button class="ws-x" data-ref="${or}" data-act="delOpt" title="Remove this option">✕</button>`}</div>${effectList(o.effects, dis)}</div>`;
       }).join('')}${dis || e.choose.length >= 4 ? '' : `<button class="ws-addfx" data-ref="${r}" data-act="addOpt">＋ Add option</button>`}</div>`;
     }
@@ -511,7 +514,8 @@
       case 'freeMax': if (el.value === '') return; e.freeAcquire.max = num(el.value, 0, 20); structural = false; break;
       case 'freeTag': if (el.value) e.freeAcquire.tag = el.value; else delete e.freeAcquire.tag; structural = false; break;
       case 'addOpt': e.choose.push({ label: 'Draw a card', effects: [{ draw: 1 }] }); break;
-      case 'delOpt': e.choose.splice(h.j, 1); break;
+      case 'delOpt': e.choose.splice(h.j, 1); if (e.pick >= e.choose.length) { if (e.choose.length > 2) e.pick = e.choose.length - 1; else delete e.pick; } break;
+      case 'pick': { const n = num(el.value, 1, 3); if (n > 1) e.pick = n; else delete e.pick; break; }
       case 'label': e.choose[h.j].label = el.value.slice(0, 40); structural = false; break;
       case 'needGold': case 'needWater': {
         const o = e.choose[h.j];

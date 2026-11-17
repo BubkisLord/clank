@@ -6,11 +6,16 @@ import gems from './gems.js';
 import companions from './companions.js';
 import { uid, shuffle } from '../util.js';
 
+import sunken from './sunken-treasures.js';
+import promos from './promos.js';
+
 // To add a new set of cards: create a file exporting an array and add it here.
 const DUNGEON_SETS = [monsters, devices, gems, companions];
+// Expansion cards are known to the game (so custom and built-in decks can use them) but are not in the base deck.
+export const EXPANSIONS = { sunken, promos };
 
 export const CARD_DEFS = {};
-for (const set of [starting, reserve, ...DUNGEON_SETS]) {
+for (const set of [starting, reserve, ...DUNGEON_SETS, ...Object.values(EXPANSIONS)]) {
   for (const def of set) {
     if (CARD_DEFS[def.id]) throw new Error(`Duplicate card id: ${def.id}`);
     CARD_DEFS[def.id] = def;
@@ -51,6 +56,7 @@ export function publicDef(d) {
   return {
     id: d.id, name: d.name, kind: d.kind, tags: d.tags || [], cost: d.cost ?? null, swords: d.swords ?? null,
     points: d.points ?? 0, dragon: !!d.dragon, danger: !!d.danger, text: d.text || '', reserve: !!d.reserve, persistent: !!d.persistent,
+    where: d.where || null, endScore: d.endScore || null,
   };
 }
 

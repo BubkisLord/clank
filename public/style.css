@@ -117,6 +117,7 @@ h1,h2,h3,h4 { font-family:var(--display); font-weight:700; margin:0; letter-spac
 /* ---------- board svg ---------- */
 .room { fill:url(#roomShade); stroke:#8a7256; stroke-width:2; transition:stroke .15s; }
 .room.start { stroke:#9fbf6a; }
+.room.flooded { fill:url(#floodShade); stroke:#4fb3c4; }
 .room.here { stroke:#fff; stroke-width:3.5; }
 .room.can-move { stroke:var(--gold); stroke-width:4; cursor:pointer; }
 g[data-mv]:hover .room, g[data-tp]:hover .room { stroke:#fff; }
@@ -722,3 +723,4 @@ html:not(.dark) .ws-edhead .defer { color:var(--parch-ink); }
   .ws-preview .card { --w:230px; font-size:14px; }
   .ws-preview .card .banner { font-size:16px; }
 }
+.hud .m.air { color:#8fe3f0; font-weight:600; }

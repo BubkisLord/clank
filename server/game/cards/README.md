@@ -22,7 +22,10 @@ the engine needs to change.
   defeat: [ ...effects ],  // monster: when defeated
   acquire:[ ...effects ],  // when bought from the dungeon row
   arrive: [ ...effects ],  // when revealed into the dungeon row
-  endGamePoints(game, player) => number   // optional bonus scoring
+  discard:[ ...effects ],  // companion: when another card makes you discard this one (Sunken Treasures)
+  where: 'depths',         // optional: only acquire / fight / use while in the Depths ('depths') or a Crystal Cave ('crystal')
+  endScore: { perCard: 'secret_tome', points: 2 },  // optional end-game bonus, one of:
+           // { perCard: id, points } · { perGold: 5, points: 1 } · { mastery: true, points: 10 } · { treasures: 2, points: 4 } · { marketItems: 3, points: 7 }
 }
 ```
 
@@ -46,11 +49,21 @@ Effects are plain objects processed by `../effects.js`. Available keys:
 | `{ buyTomes: { gold: 7, count: 2 } }` | pay gold for Secret Tomes from the Reserve |
 | `{ takeAdjacentSecret: true }` | take a secret token from an adjacent room |
 | `{ skillPerClank: true }` | +1 skill for every clank made this turn (Swagger) |
-| `{ returnDragonCubes: true }` | put set-aside black cubes back into the bag |
+| `{ returnDragonCubes: 3 }` | put up to n set-aside black cubes back into the bag |
+| `{ goldBonus: 1 }` | each time you gain gold this turn, gain n more (Search) |
+| `{ rage: 1 }` | move the Dragon marker n spaces (negative moves it down) |
+| `{ freeAcquire: { max: 3, tag? } }` | take a non-monster Dungeon Row card costing up to max for free (optionally only one subtype) |
+| `{ returnToHand: true }` | put this card back into your hand (use in a `discard` slot) |
 | `{ fn: (game, player, card) => void }` | escape hatch for anything else |
 
 Conditions for `when`: `{ has: 'crown' | 'artifact' | 'monkeyIdol' | 'chalice' }`,
-`{ otherCompanion: true }`.
+`{ otherCompanion: true }`, `{ inPlayOrDiscard: 'secret_tome' }`.
+
+## Expansions
+
+`sunken-treasures.js` and `promos.js` hold expansion cards. They are registered in `CARD_DEFS` but are
+not in the default dungeon deck; `decks.js` builds the read-only built-in decks that shuffle them in
+(Base + Sunken Treasures, Base + Promos, and both).
 
 ## Custom decks (Deck Workshop)
 

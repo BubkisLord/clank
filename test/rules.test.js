@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Game } from '../server/game/engine.js';
 import { makeCard, def } from '../server/game/cards/index.js';
-import { generateBoard } from '../server/game/board.js';
+import { generateBoard, Board } from '../server/game/board.js';
 
 function setup(n = 2, opts = {}) {
   const g = new Game('T');
@@ -31,7 +31,7 @@ test('no attack when the refilled cards have no dragon symbol', () => {
   const g = setup();
   const p = cur(g);
   g.dungeonRow[0] = null;
-  g.dungeonDeck.unshift(makeCard('kobold'));
+  g.dungeonDeck.unshift(makeCard('crystal_golem')); // no dragon symbol
   const before = g.logs.length;
   playAll(g);
   g.act(p.id, { type: 'endTurn' });
@@ -201,4 +201,146 @@ test('every dragon attack gets a new number, even after the chronicle is full', 
   g.dragonAttack(0, 'test');
   assert.equal(g.lastAttack.seq, a + 1);
   assert.equal(g.stateFor(g.players[0].id).attacks.at(-1).seq, a + 1);
+});
+
+test('the base dungeon deck matches the reference card list: 100 cards, 26 dragon symbols', async () => {
+  const { BASE_CARDS } = await import('../server/game/cards/decks.js');
+  const n = (f) => BASE_CARDS.filter(f).reduce((s, d) => s + d.qty, 0);
+  assert.equal(n(() => true), 100);
+  assert.equal(n((d) => d.kind === 'monster'), 20);
+  assert.equal(n((d) => d.kind === 'device'), 10);
+  assert.equal(n((d) => (d.tags || []).includes('gem')), 9);
+  assert.equal(n((d) => d.dragon), 26);
+  assert.equal(n((d) => d.danger), 5);
+});
+
+test('depths-only cards can only be taken in the Depths', () => {
+  const g = setup();
+  const p = cur(g);
+  g.dungeonRow[0] = makeCard('cave_troll');
+  g.turn.swords = 10;
+  assert.ok(!g.legalFor(p).fightable.includes(0));
+  assert.throws(() => g.act(p.id, { type: 'fight', slot: 0 }), /only be fought in the Depths/);
+  p.room = g.board.rooms.find((r) => r.depths).id;
+  assert.ok(g.legalFor(p).fightable.includes(0));
+});
+
+test('Search gives +1 gold every time you gain gold that turn', () => {
+  const g = setup();
+  const p = cur(g);
+  p.hand = [makeCard('search'), makeCard('pickaxe')];
+  const gold = p.gold;
+  playAll(g);
+  assert.equal(p.gold, gold + 3);
+});
+
+test('end-game bonuses: Wizard counts Secret Tomes, The Duke counts gold', () => {
+  const g = setup();
+  const p = cur(g);
+  p.deck = [makeCard('wizard'), makeCard('secret_tome'), makeCard('secret_tome'), makeCard('the_duke')];
+  p.hand = []; p.discard = []; p.playArea = [];
+  p.gold = 11;
+  assert.equal(g.score(p, true).breakdown.bonus, 4 + 2);
+});
+
+test('the game ends at once when the Dungeon Deck runs out', () => {
+  const g = setup(2);
+  const [a, b] = g.players;
+  a.status = 'escaped';
+  b.room = g.board.rooms.find((r) => r.depths).id;
+  g.dungeonDeck = [];
+  g.dungeonRow[0] = null;
+  g.act(cur(g).id === a.id ? a.id : b.id, { type: 'endTurn' });
+  assert.equal(g.phase, 'ended');
+  assert.equal(b.status, 'ko');
+  assert.equal(b.koRescued, false, 'knocked out in the Depths: no points');
+  assert.ok(g.logs.some((l) => l.t.includes('Dungeon Deck has run out')));
+});
+
+// ---------- Sunken Treasures / promo cards ----------
+const resolve = (g, pick) => { const o = g.pending.options.find(pick); assert.ok(o, 'option offered'); g.act(g.pending.pid, { type: 'resolve', value: o.value }); };
+
+test('discarding Coin Purse to another card pays 5 gold; Boomerang comes back to hand', () => {
+  const g = setup();
+  const p = cur(g);
+  p.hand = [makeCard('medic'), makeCard('coin_purse')];
+  const gold = p.gold;
+  g.act(p.id, { type: 'play', uid: p.hand[0].uid });
+  resolve(g, (o) => o.label === 'Coin Purse');
+  assert.equal(p.gold, gold + 5);
+  p.hand = [makeCard('climbing_gear'), makeCard('boomerang')];
+  g.act(p.id, { type: 'play', uid: p.hand[0].uid });
+  resolve(g, (o) => o.label === 'Boomerang');
+  assert.deepEqual(p.hand.map((c) => c.id), ['boomerang']);
+  assert.ok(!p.discard.some((c) => c.id === 'boomerang'));
+});
+
+test('Pickpocket takes a cheap Dungeon Row card for free', () => {
+  const g = setup();
+  const p = cur(g);
+  g.dungeonRow[0] = makeCard('merling'); g.dungeonRow[1] = makeCard('elven_ranger');
+  p.hand = [makeCard('pickpocket')];
+  g.act(p.id, { type: 'play', uid: p.hand[0].uid });
+  assert.ok(!g.pending.options.some((o) => o.label === 'Elven Ranger'), 'costs 5, over the limit');
+  resolve(g, (o) => o.label === 'Merling');
+  assert.ok(p.discard.some((c) => c.id === 'merling'));
+  assert.equal(g.dungeonRow[0], null);
+});
+
+test('Alchemist pays 2 gold when a Secret Tome is in play or the discard pile', () => {
+  const g = setup();
+  const p = cur(g);
+  p.discard = [makeCard('secret_tome')];
+  p.hand = [makeCard('alchemist')];
+  const gold = p.gold;
+  g.act(p.id, { type: 'play', uid: p.hand[0].uid });
+  assert.equal(p.gold, gold + 2);
+});
+
+test('Grand Plan scores 7 with three Market items', () => {
+  const g = setup();
+  const p = cur(g);
+  p.deck = [makeCard('grand_plan')]; p.hand = []; p.discard = []; p.playArea = [];
+  assert.equal(g.score(p, true).breakdown.bonus, 0);
+  p.items.backpack = 1; p.items.masterKey = 1; p.items.crowns = [10];
+  assert.equal(g.score(p, true).breakdown.bonus, 7);
+});
+
+
+test('a deck with water cards floods part of the Depths; the base deck does not', async () => {
+  const { BUILTIN_BY_ID } = await import('../server/game/cards/decks.js');
+  assert.ok(!setup().board.rooms.some((r) => r.flooded));
+  for (const map of ['classic', 'random']) {
+    const g = new Game('W'); g.addPlayer('A'); g.addPlayer('B');
+    Object.assign(g.options, { autoEnd: false, map });
+    g.setDeck(BUILTIN_BY_ID['sunken-treasures']);
+    g.start();
+    const wet = g.board.rooms.filter((r) => r.flooded);
+    assert.ok(wet.length >= 5, `${map}: ${wet.length} flooded rooms`);
+    assert.ok(wet.every((r) => r.depths && !r.crystal && !r.market && !r.start));
+  }
+  assert.ok(!generateBoard().rooms.some((r) => r.flooded), 'flooding never touches the shared room list');
+});
+
+test('flooded rooms: swimming costs 2 boots, and staying under all turn costs 1 health unless a Mermaid helps', () => {
+  const g = setup();
+  const p = cur(g);
+  const ob = g.board;
+  g.board = new Board({ rooms: ob.rooms.map((r) => ({ ...r })), tunnels: ob.tunnels, name: ob.name, geometry: ob.geometry }); // never touch the shared classic rooms
+  const [a, b] = g.board.tunnels.find(([x, y]) => g.board.room(x).depths && g.board.room(y).depths && x !== 'start');
+  g.board.room(a).flooded = true; g.board.room(b).flooded = true;
+  p.room = a;
+  assert.equal(g.legalFor(p).moves.find((m) => m.to === b).cost, 2);
+  g.turn.noAir = true;
+  p.hand = [];
+  const dmg = p.damage;
+  g.act(p.id, { type: 'endTurn' });
+  assert.equal(p.damage, dmg + 1);
+  // next time round, a Mermaid saves the player
+  while (cur(g) !== p) g.act(cur(g).id, { type: 'endTurn' });
+  assert.ok(g.turn.noAir, 'starts the turn underwater');
+  p.hand = [makeCard('mermaid')];
+  g.act(p.id, { type: 'play', uid: p.hand[0].uid });
+  g.act(p.id, { type: 'endTurn' });
+  assert.equal(p.damage, dmg + 1);
 });

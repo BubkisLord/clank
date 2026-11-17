@@ -94,6 +94,9 @@ function effectValue(list, ctx) {
         if (e.replaceRow) v += 0.3;
         if (e.takeAdjacentSecret) v += 1;
         if (e.gemDiscount) v += 0.3;
+        if (e.goldBonus) v += 0.8;
+        if (e.freeAcquire) v += 1.5;
+        if (e.rage) v -= 0.3 * e.rage;
     }
     return v;
 }
@@ -152,7 +155,8 @@ function routeCosts(game, p, from, { reverse = false } = {}) {
         for (const t of edges(u)) {
             if (t.locked && !p.items.masterKey) continue;
             const room = game.board.room(reverse ? u : t.to);
-            const c = (t.boots || 1) + (t.monsters || 0) * 1.3 + (room.crystal ? 1.2 : 0);
+            const swim = room.flooded && game.board.room(reverse ? t.to : u)?.flooded;
+            const c = (swim ? Math.max(2, t.boots || 1) : (t.boots || 1)) + (t.monsters || 0) * 1.3 + (room.crystal ? 1.2 : 0) + (room.flooded ? 0.4 : 0);
             if (dist[u] + c < (dist[t.to] ?? Infinity)) { dist[t.to] = dist[u] + c; prev[t.to] = u; }
         }
     }

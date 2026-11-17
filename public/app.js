@@ -9,8 +9,10 @@ let me = null;           // my player id
 let teleportMode = false;
 const COLOR = { red: '#e74c3c', blue: '#3498db', green: '#2ecc71', yellow: '#f1c40f' };
 // Background art per room type (public/assets/tiles) and per card kind (public/assets/cards)
+// A flooded room keeps its own art with water over it, except plain rooms, which get the flooded hall.
 function tileFor(r) {
   if (r.start) return 'start';
+  if (r.flooded && !r.market && !r.fountain && !r.monkeyShrine && !r.artifact) return 'flooded';
   if (r.crystal) return 'crystal';
   if (r.market) return 'market';
   if (r.fountain) return 'fountain';
@@ -391,6 +393,7 @@ function renderBoard() {
   };
   let s = `<defs>
     <linearGradient id="roomShade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d0a10" stop-opacity=".15"/><stop offset=".45" stop-color="#0d0a10" stop-opacity=".55"/><stop offset="1" stop-color="#0d0a10" stop-opacity=".9"/></linearGradient>
+    <linearGradient id="floodShade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#03141a" stop-opacity=".15"/><stop offset=".45" stop-color="#03141a" stop-opacity=".3"/><stop offset="1" stop-color="#03141a" stop-opacity=".65"/></linearGradient>
     <symbol id="ic-swords" viewBox="0 0 24 24"><g id="ic-sword1">
       <polygon points="2,2 5.2,3 15.6,13.4 13.4,15.6 3,5.2" fill="#eef1f6" stroke="#0d0a10" stroke-width=".6" stroke-linejoin="round"/>
       <line x1="11.2" y1="17.6" x2="17.6" y2="11.2" stroke="#f0b04a" stroke-width="2" stroke-linecap="round"/>
@@ -441,13 +444,15 @@ function renderBoard() {
     if (r.crystal) info.push('Crystal Cave');
     if (r.market) info.push('Market');
     if (r.fountain) info.push('Healing Fountain');
+    if (r.flooded) info.push('🌊 Flooded');
     if (r.start) info.push('Exit');
     let title = r.name;
     if (m) title += m.ok ? ` — move (${m.cost} boot${m.cost > 1 ? 's' : ''}${m.monsters ? `, ${m.swordsUsed} sword(s) used, ${m.damage} damage` : ''})` : ` — ${m.reason}`;
     const rx = r.x - W / 2, ry = r.y - H / 2;
     s += `<g ${click}><title>${title}</title><clipPath id="clip-${r.id}"><rect x="${rx}" y="${ry}" width="${W}" height="${H}" rx="12"/></clipPath>
-      <image href="assets/tiles/tile-${tileFor(r)}.jpg" x="${rx}" y="${ry}" width="${W}" height="${H}" preserveAspectRatio="xMidYMid slice" clip-path="url(#clip-${r.id})"/>
-      <rect x="${rx}" y="${ry}" width="${W}" height="${H}" rx="12" class="${cls.join(' ')}"/>
+      <image href="assets/tiles/tile-${tileFor(r)}.jpg" x="${rx}" y="${ry}" width="${W}" height="${H}" preserveAspectRatio="xMid${tileFor(r) === 'flooded' ? 'YMax' : 'YMid'} slice" clip-path="url(#clip-${r.id})"/>
+      ${r.flooded && tileFor(r) !== 'flooded' ? `<image href="assets/tiles/flood-overlay.png" x="${rx}" y="${ry}" width="${W}" height="${H}" preserveAspectRatio="xMidYMax slice" clip-path="url(#clip-${r.id})"/>` : ''}
+      <rect x="${rx}" y="${ry}" width="${W}" height="${H}" rx="12" class="${cls.join(' ')}${r.flooded ? ' flooded' : ''}"/>
       <text x="${r.x}" y="${r.y + 6}" class="rname">${esc(r.name)}</text><text x="${r.x}" y="${r.y + 26}" class="rinfo">${info.join('   ')}</text></g>`;
     const here = state.players.filter((p) => p.room === r.id && p.status === 'in');
     here.forEach((p, i) => { const cx = rx + 16 + i * 24, cy = ry + 2; const cur = p.id === state.currentPlayer; s += `<g class="pawn-g">${cur ? `<circle cx="${cx}" cy="${cy}" r="11" class="pawn-ring" fill="none" stroke="${COLOR[p.color]}"/>` : ''}<circle cx="${cx}" cy="${cy}" r="11" class="pawn" fill="${COLOR[p.color]}"><title>${esc(p.name)}${cur ? ' (taking their turn)' : ''}</title></circle><text x="${cx}" y="${cy + 4}" class="pawn-l">${esc(p.name[0].toUpperCase())}</text></g>`; });
@@ -472,8 +477,9 @@ function renderHud(moves, tele) {
   const t = state.turn;
   let h = '';
   if (mp.status === 'in') {
-    const feats = [r.crystal ? '💎 Crystal cave' : '', r.market ? '🛒 Market' : '', r.fountain ? '⛲ Fountain' : '', r.depths ? 'in the Depths' : '', r.start ? 'outside the dungeon' : ''].filter(Boolean).join(' · ');
-    h += `<div class="hud"><div class="k">You are in</div><div class="v">${esc(r.name)}</div>${feats ? `<div class="m">${feats}</div>` : ''}</div>`;
+    const feats = [r.crystal ? '💎 Crystal cave' : '', r.market ? '🛒 Market' : '', r.fountain ? '⛲ Fountain' : '', r.flooded ? '🌊 Flooded' : '', r.depths ? 'in the Depths' : '', r.start ? 'outside the dungeon' : ''].filter(Boolean).join(' · ');
+    const air = isMyTurn() && t?.noAir ? `<div class="m air">🫧 Out of air: reach a dry room this turn${t.flags.waterBreathing ? ' (or not: you can breathe underwater)' : ' or take 1 damage'}</div>` : '';
+    h += `<div class="hud"><div class="k">You are in</div><div class="v">${esc(r.name)}</div>${feats ? `<div class="m">${feats}</div>` : ''}${air}</div>`;
   }
   if (isMyTurn() && !state.pending) {
     const exhausted = t.enteredCrystalCave && !t.flags.ignoreCrystalCaves;

@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Game } from '../server/game/engine.js';
 import { CARD_DEFS, def } from '../server/game/cards/index.js';
-import { BASE_DECK, BASE_CARDS, cleanDeck, cleanCard, registerDeck, DeckError } from '../server/game/cards/decks.js';
+import { BASE_DECK, BASE_CARDS, BUILTIN_DECKS, cleanDeck, cleanCard, registerDeck, DeckError } from '../server/game/cards/decks.js';
 import { nextAction } from '../server/game/ai.js';
 
 process.env.CLANK_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'clank-decks-'));
@@ -68,11 +68,20 @@ test('edited and new cards get stable content ids and their own definitions', ()
   assert.ok(a.list.some((x) => x.id === 'goblin') === false);
 });
 
-test('an edited base card keeps its special end-game scoring', () => {
-  const deck = deckWith((cards) => { cards.find((c) => c.id === 'dwarven_peddler').cost = 2; });
+test('end-game bonuses and room limits are plain data that survive editing', () => {
+  const deck = deckWith((cards) => { cards.find((c) => c.id === 'dwarven_peddler').cost = 2; cards.find((c) => c.id === 'cave_troll').swords = 5; });
   const { custom } = registerDeck(deck);
-  assert.equal(custom.length, 1);
-  assert.equal(typeof CARD_DEFS[custom[0]].endGamePoints, 'function');
+  assert.equal(custom.length, 2);
+  const peddler = CARD_DEFS[custom.find((id) => CARD_DEFS[id].name === 'Dwarven Peddler')];
+  assert.deepEqual(peddler.endScore, { treasures: 2, points: 4 });
+  assert.equal(CARD_DEFS[custom.find((id) => CARD_DEFS[id].name === 'Cave Troll')].where, 'depths');
+  assert.throws(() => cleanCard({ id: 'x', name: 'X', kind: 'companion', endScore: { fn: 1, points: 2 } }), DeckError);
+  assert.throws(() => cleanCard({ id: 'x', name: 'X', kind: 'monster', swords: 1, where: 'moon' }), DeckError);
+});
+
+test('a saved deck that names a base card which no longer exists still loads', () => {
+  const d = cleanDeck({ name: 'Old', cards: [{ id: 'magic_spring', baseId: 'magic_spring', name: 'Magic Spring', kind: 'device', qty: 10, cost: 3, use: [{ trash: { from: ['hand'] } }] }, { id: 'b', name: 'B', kind: 'monster', qty: 10, swords: 1 }] });
+  assert.equal(d.cards[0].baseId, undefined);
 });
 
 test('a game plays to the end with a custom deck, and clients get the custom cards', () => {
@@ -106,6 +115,33 @@ test('a game plays to the end with a custom deck, and clients get the custom car
   }
 });
 
+test('built-in expansion decks hold the right cards, keep their ids and play to the end', () => {
+  const totals = Object.fromEntries(BUILTIN_DECKS.map((d) => [d.id, d.cards.reduce((s, c) => s + c.qty, 0)]));
+  assert.deepEqual(totals, { base: 100, 'sunken-treasures': 135, promos: 106, everything: 141 });
+  for (const deck of BUILTIN_DECKS) {
+    assert.deepEqual(registerDeck(deck).custom, [], `${deck.id}: every card is a known card`);
+    assert.deepEqual(registerDeck(cleanDeck(copy(deck))).custom, [], `${deck.id}: survives a clone`);
+  }
+  for (const deck of BUILTIN_DECKS.slice(1)) for (let run = 0; run < 4; run++) {
+    const g = new Game('EXP');
+    g.addPlayer('A', { bot: true }); g.addPlayer('B', { bot: true });
+    g.players.forEach((p) => { p.bot ||= { style: 'balanced' }; });
+    g.setDeck(deck);
+    g.start();
+    let steps = 0;
+    while (g.phase === 'playing' && steps++ < 20000) {
+      const actor = g.pending ? g.playerById(g.pending.pid) : g.currentPlayer();
+      const a = nextAction(g, actor) || { type: 'endTurn' };
+      try { g.act(actor.id, a); }
+      catch (e) {
+        if (e.constructor.name !== 'GameError') throw e;
+        if (g.pending) g.act(g.pending.pid, { type: 'resolve', value: g.pending.options[0].value }); else g.act(actor.id, { type: 'endTurn' });
+      }
+    }
+    assert.equal(g.phase, 'ended', `${deck.id} game should end`);
+  }
+});
+
 test('the deck store saves, lists, loads and deletes decks; the base deck is read-only', () => {
   assert.equal(store.listDecks()[0].id, 'base');
   const saved = store.saveDeck({ name: 'My Heist', cards: BASE_DECK.cards });
@@ -118,6 +154,10 @@ test('the deck store saves, lists, loads and deletes decks; the base deck is rea
   assert.equal(store.getDeck(saved.id).cards[0].qty, 5);
   assert.throws(() => store.saveDeck(edited, 'base'), /read-only/);
   assert.throws(() => store.deleteDeck('base'), DeckError);
+  assert.throws(() => store.saveDeck(edited, 'sunken-treasures'), /read-only/);
+  assert.throws(() => store.deleteDeck('everything'), DeckError);
+  assert.deepEqual(store.listDecks().filter((d) => d.builtin).map((d) => d.id), ['base', 'sunken-treasures', 'promos', 'everything']);
+  assert.equal(store.getDeck('promos').name, 'Base + Promos');
   assert.throws(() => store.saveDeck(edited, '../../etc/passwd'), /No such deck/);
   assert.equal(store.getDeck('../x'), null);
   store.deleteDeck(saved.id);

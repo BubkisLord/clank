@@ -1,7 +1,7 @@
 // Board definitions: the hand-made 'classic' map below, plus a rule-based random generator.
 // Board definition. Coordinates are in a 1000x1000 space used by the client to draw the map.
 // Room features: start, crystal, market, fountain, monkeyShrine, artifact (value),
-//                majorSecret (true), minorSecrets (count), depths (bool)
+//                majorSecret (true), minorSecrets (count), depths (bool), flooded (bool, Sunken Treasures)
 // Tunnels: [from, to, opts]  opts: { boots: 2 (footprints), monsters: n, locked: true, oneWay: true (from -> to) }
 
 export const ROOMS = [
@@ -337,6 +337,29 @@ export function generateBoard(seed = Math.floor(Math.random() * 2 ** 31)) {
   const cleanRooms = rooms.map(({ feature, row, ...r }) => r);
   const cleanTunnels = tunnels.map(([a, b, o]) => [a, b, Object.keys(o).length ? o : undefined]).map(([a, b, o]) => (o ? [a, b, o] : [a, b]));
   return new Board({ rooms: cleanRooms, tunnels: cleanTunnels, name: `random-${seed}`, geometry: G });
+}
+
+// Sunken Treasures: flood a few rooms in the Depths, in two or three small connected pools.
+// Returns a new Board (the classic room list is shared, so it is never changed in place).
+// Crystal Caves, Markets and the start never flood.
+export function floodBoard(board, rnd = Math.random) {
+  const rooms = board.rooms.map((r) => ({ ...r }));
+  const byId = Object.fromEntries(rooms.map((r) => [r.id, r]));
+  const ok = (r) => r && r.depths && !r.start && !r.crystal && !r.market && !r.flooded;
+  const target = Math.max(5, Math.round(rooms.filter((r) => r.depths).length * 0.3));
+  let flooded = 0, tries = 0;
+  while (flooded < target && tries++ < 50) {
+    const seeds = rooms.filter(ok);
+    if (!seeds.length) break;
+    let r = seeds[Math.floor(rnd() * seeds.length)];
+    const size = 2 + Math.floor(rnd() * 2);
+    for (let k = 0; k < size && r && flooded < target; k++) {
+      r.flooded = true; flooded++;
+      const next = board.connectedRooms(r.id).map((id) => byId[id]).filter(ok);
+      r = next[Math.floor(rnd() * next.length)];
+    }
+  }
+  return new Board({ rooms, tunnels: board.tunnels, name: board.name, geometry: board.geometry });
 }
 
 export function publicRules() {

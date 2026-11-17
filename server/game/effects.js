@@ -8,6 +8,8 @@ export function evalCondition(game, p, cond, card) {
   if (cond.has === 'artifact') return p.artifacts.length > 0;
   if (cond.has === 'monkeyIdol') return p.monkeyIdols > 0;
   if (cond.has === 'chalice') return p.secrets.some((s) => s.id === 'chalice');
+  if (cond.inPlayOrDiscard) return [...p.playArea, ...p.discard].some((c) => c.id === cond.inPlayOrDiscard);
+  if (cond.inFlooded) return !!game.board.room(p.room)?.flooded;
   if (cond.otherCompanion) return p.playArea.some((c) => c.uid !== card?.uid && (def(c).tags || []).includes('companion'));
   if (typeof cond.fn === 'function') return !!cond.fn(game, p, card);
   return false;
@@ -23,7 +25,10 @@ export function applyEffect(game, p, e, card) {
   if (e.skill) { if (mine) t.skill += e.skill; }
   if (e.swords) { if (mine) t.swords += e.swords; }
   if (e.boots) { if (mine) t.boots += e.boots; }
-  if (e.gold) { p.gold += e.gold; game.log(`${p.name} gains ${e.gold} gold`); }
+  if (e.gold) {
+    const n = e.gold + (mine ? t.goldBonus : 0); // Search: +1 gold each time you gain gold this turn
+    p.gold += n; game.log(`${p.name} gains ${n} gold`);
+  }
   if (e.heal) game.heal(p, e.heal);
   if (e.clank) game.addClank(p, e.clank);
   if (e.draw) game.drawCards(p, e.draw);
@@ -34,7 +39,12 @@ export function applyEffect(game, p, e, card) {
   if (e.allClank) for (const o of game.players) if (o.status === 'in') game.addClank(o, e.allClank);
   if (e.flag) { if (mine) t.flags[e.flag] = true; }
   if (e.gemDiscount) { if (mine) t.gemDiscount += e.gemDiscount; }
-  if (e.returnDragonCubes) { game.bag.black += game.setAside.black; game.setAside.black = 0; game.log('Set-aside dragon cubes return to the bag'); }
+  if (e.goldBonus) { if (mine) t.goldBonus += e.goldBonus; }
+  if (e.returnDragonCubes) {
+    const n = Math.min(game.setAside.black, e.returnDragonCubes === true ? Infinity : e.returnDragonCubes);
+    game.bag.black += n; game.setAside.black -= n;
+    if (n) game.log(`${n} set-aside dragon cube${n === 1 ? '' : 's'} return${n === 1 ? 's' : ''} to the bag`);
+  }
   if (e.skillPerClank && mine) { t.skillPerClank += 1; t.skill += t.clankMade; }
 
   if (e.buyTomes) {
@@ -53,8 +63,9 @@ export function applyEffect(game, p, e, card) {
   }
 
   if (e.choose) {
-    const opts = e.choose.filter((o) => !o.requires || (o.requires.gold == null || p.gold >= o.requires.gold));
-    for (const o of e.choose) if (!opts.includes(o)) game.log(`${p.name} cannot afford "${o.label}" (${p.gold}/${o.requires.gold} gold)`);
+    const flooded = !!game.board.room(p.room)?.flooded;
+    const opts = e.choose.filter((o) => !o.requires || ((o.requires.gold == null || p.gold >= o.requires.gold) && (!o.requires.flooded || flooded)));
+    for (const o of e.choose) if (!opts.includes(o)) game.log(o.requires.flooded && !flooded ? `"${o.label}" needs a flooded room` : `${p.name} cannot afford "${o.label}" (${p.gold}/${o.requires.gold} gold)`);
     if (opts.length === 0) return;
     if (opts.length === 1) return game.queueFront(p, opts[0].effects, card);
     game.prompt(p, {
@@ -75,6 +86,7 @@ export function applyEffect(game, p, e, card) {
       p.discard.push(c);
       game.log(`${p.name} discards ${def(c).name}`);
       game.queueFront(p, e.discardThen, card);
+      if (def(c).discard?.length) game.queueFront(p, def(c).discard, c); // "when you discard this" (Sunken Treasures)
     });
   }
 
@@ -106,6 +118,31 @@ export function applyEffect(game, p, e, card) {
       game.dungeonRow[i] = null;
       game.log(`${p.name} replaces ${def(old).name} in the Dungeon Row`);
       game.fillRowSlot(i, { ignoreDragon: true });
+    });
+  }
+
+  if (e.rage) game.moveRage(e.rage);
+
+  if (e.returnToHand && card) {
+    const i = p.discard.findIndex((c) => c.uid === card.uid);
+    if (i >= 0) { p.hand.push(...p.discard.splice(i, 1)); game.log(`${def(card).name} returns to ${p.name}'s hand`); }
+  }
+
+  if (e.freeAcquire) {
+    const { max, tag } = e.freeAcquire;
+    const options = game.dungeonRow.map((c, i) => {
+      if (!c) return null;
+      const d = def(c);
+      if (d.kind === 'monster' || (d.cost || 0) > max || (tag && !(d.tags || []).includes(tag)) || !game.inPlace(p, d)) return null;
+      return { label: d.name, value: i, card: publicDef(d) };
+    }).filter(Boolean);
+    if (options.length === 0) return game.log('No card in the Dungeon Row can be taken');
+    options.push({ label: 'Take nothing', value: null });
+    game.prompt(p, { title: `${card ? def(card).name : 'Acquire'}: take a card for free`, options }, (i) => {
+      const c = i == null ? null : game.dungeonRow[i];
+      if (!c) return;
+      game.dungeonRow[i] = null;
+      game.gainCard(p, c);
     });
   }
 

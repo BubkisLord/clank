@@ -1,10 +1,10 @@
 import { makeBotProfile, STYLES, LEVELS, PACES } from './ai.js';
 import { uid, shuffle } from './util.js';
 import { def, makeCard, publicDef, buildDungeonDeck, buildStartingDeck, buildReserve, allPublicDefs, CARD_DEFS } from './cards/index.js';
-import { RAGE_TRACK, RAGE_START, HEALTH_MAX, CLANK_SUPPLY, DRAGON_CUBES, MASTERY_POINTS, MARKET_PRICE, ARTIFACTS, classicBoard, generateBoard, publicRules } from './board.js';
+import { RAGE_TRACK, RAGE_START, HEALTH_MAX, CLANK_SUPPLY, DRAGON_CUBES, MASTERY_POINTS, MARKET_PRICE, ARTIFACTS, classicBoard, generateBoard, floodBoard, publicRules } from './board.js';
 import { MAJOR_SECRETS, MINOR_SECRETS, SECRET_DEFS, buildSecretStack, publicSecretDefs } from './secrets.js';
 import { applyEffect, evalCondition } from './effects.js';
-import { BASE_DECK, registerDeck } from './cards/decks.js';
+import { BASE_DECK, registerDeck, needsFlooding } from './cards/decks.js';
 
 const COLORS = ['red', 'blue', 'green', 'yellow'];
 const MAX_PLAYERS = 4;
@@ -16,6 +16,22 @@ export function cleanName(raw) {
   return n || 'Nameless Thief';
 }
 const fail = (m) => { throw new GameError(m); };
+const PLACE = { depths: 'the Depths', crystal: 'a Crystal Cave' };
+
+// End-game bonus points from a card's `endScore` (see cards/README.md). `b` is the score breakdown so far.
+export function endScore(d, p, b) {
+  const e = d.endScore;
+  if (!e) return 0;
+  if (e.perCard) return e.points * [...p.deck, ...p.hand, ...p.discard, ...p.playArea].filter((c) => c.id === e.perCard).length;
+  if (e.perGold) return e.points * Math.floor(b.gold / e.perGold);
+  if (e.mastery) return p.mastery ? e.points : 0;
+  if (e.marketItems) return p.items.masterKey + p.items.backpack + p.items.crowns.length >= e.marketItems ? e.points : 0;
+  if (e.treasures) {
+    const kinds = (p.secrets.some((s) => s.id === 'chalice') ? 1 : 0) + (p.secrets.some((s) => s.id === 'dragon_egg') ? 1 : 0) + (p.monkeyIdols > 0 ? 1 : 0);
+    return kinds >= e.treasures ? e.points : 0;
+  }
+  return 0;
+}
 
 export class Game {
   constructor(code) {
@@ -97,6 +113,7 @@ export class Game {
 
     const { list, custom } = registerDeck(this.deck);
     this.customCards = custom;
+    if (needsFlooding(this.deck)) { this.board = floodBoard(this.board); this.log('Water has flooded parts of the Depths. Start your turn underwater and you must reach a dry room, or take 1 damage.'); }
     this.dungeonDeck = buildDungeonDeck(list);
     if (this.deck !== BASE_DECK) this.log(`The dungeon is stocked from the "${this.deck.name}" deck.`);
     this.dungeonRow = [null, null, null, null, null, null];
@@ -360,8 +377,8 @@ export class Game {
       items: p.items.masterKey * 5 + p.items.backpack * 5 + p.items.crowns.reduce((s, v) => s + v, 0),
       mastery: p.mastery ? MASTERY_POINTS : 0,
       cards: all.reduce((s, c) => s + (def(c).points || 0), 0),
-      bonus: all.reduce((s, c) => s + (def(c).endGamePoints ? def(c).endGamePoints(this, p) : 0), 0),
     };
+    b.bonus = all.reduce((s, c) => s + endScore(def(c), p, b), 0);
     const total = survived ? Object.values(b).reduce((s, v) => s + v, 0) : null;
     return { survived, breakdown: b, total, bestArtifact: Math.max(0, ...p.artifacts) };
   }
@@ -375,8 +392,9 @@ export class Game {
       if (p.onCountdown) { this.countdownStep(p); if (this.phase !== 'playing') return; this.turnIdx = (this.turnIdx + 1) % this.players.length; continue; }
       if (p.status !== 'in') { this.turnIdx = (this.turnIdx + 1) % this.players.length; continue; }
       this.turnNumber++;
-      this.turn = { skill: 0, swords: 0, boots: 0, clankMade: 0, negativeClank: 0, teleports: 0, flags: {}, enteredCrystalCave: false, conditionals: [], gemDiscount: 0, skillPerClank: 0, deferred: [] };
+      this.turn = { skill: 0, swords: 0, boots: 0, clankMade: 0, negativeClank: 0, teleports: 0, flags: {}, enteredCrystalCave: false, conditionals: [], gemDiscount: 0, goldBonus: 0, skillPerClank: 0, deferred: [] };
       this.log(`— ${p.name}'s turn —`);
+      if (p.status === 'in' && this.board.room(p.room)?.flooded) { this.turn.noAir = true; this.log(`${p.name} is underwater: reach a dry room this turn or take 1 damage`); }
       return;
     }
     this.checkGameEnd();
@@ -396,6 +414,10 @@ export class Game {
 
   finishTurn() {
     const p = this.currentPlayer();
+    if (this.turn?.noAir && !this.turn.flags.waterBreathing && p.status === 'in') {
+      this.log(`${p.name} never came up for air`);
+      if (p.supply > 0) { p.supply--; this.dealDamage(p, 1, 'out of air'); }
+    }
     if (this.turn?.deferred.length) this.log(`${p.name} lets ${this.turn.deferred.length} postponed choice${this.turn.deferred.length > 1 ? 's' : ''} lapse`);
     if (p.hand.length) this.log(`${p.name} discards ${p.hand.length} unplayed card${p.hand.length > 1 ? 's' : ''}`);
     p.discard.push(...p.playArea, ...p.hand);
@@ -410,12 +432,21 @@ export class Game {
 
   fillRowSlot(i, { ignoreDragon = false } = {}) {
     const c = this.dungeonDeck.shift();
-    if (!c) { this.dungeonRow[i] = null; return false; }
+    if (!c) { this.dungeonRow[i] = null; this.dungeonExhausted(); return false; }
     this.dungeonRow[i] = c;
     const d = def(c);
     this.log(`${d.name} arrives in the Dungeon Row`);
     if (d.arrive) this.queueBack(this.currentPlayer(), d.arrive, c);
     return !!d.dragon && !ignoreDragon;
+  }
+
+  // FAQ: if the Dungeon Deck runs out, the game ends at once. Everyone still inside is knocked out
+  // (and scores only if rescued, i.e. not in the Depths), as though their health meter had filled.
+  dungeonExhausted() {
+    if (this.phase !== 'playing') return;
+    this.log('The Dungeon Deck has run out! The dungeon collapses and the game ends.');
+    for (const o of this.activePlayers()) this.knockOut(o);
+    this.endGame();
   }
 
   refillRow() {
@@ -446,11 +477,18 @@ export class Game {
     const r = this.board.room(rid);
     this.log(`${p.name} moves to ${r.name}`);
     if (r.start) return this.escape(p);
+    if (t?.noAir && !r.flooded) { t.noAir = false; this.log(`${p.name} comes up for air`); }
     if (r.crystal && !t.flags.ignoreCrystalCaves) { t.enteredCrystalCave = true; this.log(`${p.name} is exhausted by the Crystal Cave`); }
     if (r.fountain) this.heal(p, 1);
     const rs = this.rooms[rid];
     if (r.monkeyShrine && rs.monkeyIdols > 0) { rs.monkeyIdols--; p.monkeyIdols++; this.log(`${p.name} takes a Monkey Idol`); }
     else this.takeRoomSecret(p, rid);
+  }
+
+  // Sunken Treasures: swimming from one flooded room to another costs 2 boots.
+  moveCost(from, tn) {
+    const base = tn.boots || 1;
+    return this.board.room(from)?.flooded && this.board.room(tn.to)?.flooded ? Math.max(2, base) : base;
   }
 
   // ---------------- legal move computation (for the UI) ----------------
@@ -461,7 +499,7 @@ export class Game {
     const exhausted = t.enteredCrystalCave && !t.flags.ignoreCrystalCaves;
     const inDungeon = p.status === 'in';
     for (const tn of inDungeon ? this.board.tunnelsFrom(p.room) : []) {
-      const cost = tn.boots || 1;
+      const cost = this.moveCost(p.room, tn);
       const monsters = t.flags.ignoreMonsterTunnels ? 0 : (tn.monsters || 0);
       const swordsUsed = Math.min(t.swords, monsters);
       const dmg = monsters - swordsUsed;
@@ -479,8 +517,8 @@ export class Game {
     const canTakeArtifact = !!(inDungeon && rs && rs.artifact && p.artifacts.length < capacity);
     const inMarket = inDungeon && !!this.board.room(p.room).market;
     const canBuy = inMarket && p.gold >= MARKET_PRICE ? Object.entries({ masterKey: this.market.masterKey, backpack: this.market.backpack, crown: this.market.crowns.length }).filter(([, n]) => n > 0).map(([k]) => k) : [];
-    const acquirable = this.dungeonRow.map((c, i) => c && def(c).kind !== 'monster' && this.cardCost(def(c)) <= t.skill ? i : null).filter((x) => x !== null);
-    const fightable = this.dungeonRow.map((c, i) => c && def(c).kind === 'monster' && def(c).swords <= t.swords ? i : null).filter((x) => x !== null);
+    const acquirable = this.dungeonRow.map((c, i) => c && def(c).kind !== 'monster' && this.cardCost(def(c)) <= t.skill && this.inPlace(p, def(c)) ? i : null).filter((x) => x !== null);
+    const fightable = this.dungeonRow.map((c, i) => c && def(c).kind === 'monster' && def(c).swords <= t.swords && this.inPlace(p, def(c)) ? i : null).filter((x) => x !== null);
     const reserveBuy = Object.keys(this.reserve).filter((id) => this.reserve[id] > 0 && CARD_DEFS[id].cost <= t.skill);
     const usefulSecrets = p.secrets.filter((sx) => {
       const d = SECRET_DEFS[sx.id];
@@ -493,6 +531,26 @@ export class Game {
     }).map((sx) => sx.uid);
     const hasAction = moves.some((m) => m.ok) || teleports.length > 0 || canTakeArtifact || canBuy.length > 0 || acquirable.length > 0 || fightable.length > 0 || reserveBuy.length > 0 || t.swords >= 2 || usefulSecrets.length > 0 || t.deferred.length > 0;
     return { moves, teleports, canTakeArtifact, canBuy, acquirable, fightable, reserveBuy, canFightGoblin: t.swords >= 2, canEndTurn: true, mustPlayCards: p.hand.length > 0, usefulSecrets, hasAction, deferred: t.deferred.map((d, i) => ({ i, title: d.title })) };
+  }
+
+  // A card leaves the row or reserve for player p: devices are used at once, anything else goes to their discard pile.
+  gainCard(p, card) {
+    const d = def(card);
+    if (d.kind === 'device') { this.dungeonDiscard.push(card); this.log(`${p.name} uses ${d.name}`); this.queueBack(p, d.use, card); }
+    else { p.discard.push(card); this.log(`${p.name} acquires ${d.name}`); this.queueBack(p, d.acquire, card); }
+  }
+
+  moveRage(n) {
+    const before = this.rage;
+    this.rage = Math.max(0, Math.min(this.rage + n, RAGE_TRACK.length - 1));
+    if (this.rage !== before) this.log(`The dragon marker moves ${n > 0 ? 'up' : 'down'} (now draws ${this.rageValue()} cubes)`);
+  }
+
+  // Cards marked `where` can only be acquired / fought while you stand in such a room.
+  inPlace(p, d) {
+    if (!d.where) return true;
+    const r = this.board.room(p.room);
+    return d.where === 'depths' ? !!r.depths : d.where === 'crystal' ? !!r.crystal : true;
   }
 
   cardCost(d) {
@@ -538,12 +596,12 @@ export class Game {
         if (typeof a.slot === 'number') { card = this.dungeonRow[a.slot]; if (!card) fail('Empty slot'); d = def(card); }
         else { d = CARD_DEFS[a.slot]; if (!d || !d.reserve || d.kind === 'monster') fail('Not in reserve'); if (!(this.reserve[a.slot] > 0)) fail('Reserve exhausted'); }
         if (d.kind === 'monster') fail('Monsters must be fought');
+        if (!this.inPlace(p, d)) fail(`${d.name} can only be acquired in ${PLACE[d.where]}`);
         const cost = this.cardCost(d);
         if (t.skill < cost) fail(`Need ${cost} skill`);
         t.skill -= cost;
         if (typeof a.slot === 'number') this.dungeonRow[a.slot] = null; else { this.reserve[a.slot]--; card = makeCard(d.id); }
-        if (d.kind === 'device') { this.dungeonDiscard.push(card); this.log(`${p.name} uses ${d.name}`); this.queueBack(p, d.use, card); }
-        else { p.discard.push(card); this.log(`${p.name} acquires ${d.name}`); this.queueBack(p, d.acquire, card); }
+        this.gainCard(p, card);
         break;
       }
       case 'fight': {
@@ -551,6 +609,7 @@ export class Game {
         if (a.slot === 'goblin') d = CARD_DEFS.goblin;
         else { card = this.dungeonRow[a.slot]; if (!card) fail('Empty slot'); d = def(card); }
         if (d.kind !== 'monster') fail('Not a monster');
+        if (!this.inPlace(p, d)) fail(`${d.name} can only be fought in ${PLACE[d.where]}`);
         if (t.swords < d.swords) fail(`Need ${d.swords} swords`);
         t.swords -= d.swords;
         if (card) { this.dungeonRow[a.slot] = null; this.dungeonDiscard.push(card); }

@@ -12,27 +12,41 @@ import monsters from './monsters.js';
 import devices from './devices.js';
 import gems from './gems.js';
 import companions from './companions.js';
-import { CARD_DEFS } from './index.js';
+import { CARD_DEFS, EXPANSIONS } from './index.js';
 
 export class DeckError extends Error {}
 const bad = (m) => { throw new DeckError(m); };
 
 export const BASE_CARDS = [...monsters, ...devices, ...gems, ...companions];
-const BASE_BY_ID = Object.fromEntries(BASE_CARDS.map((d) => [d.id, d]));
+// every card that ships with the game (base and expansions); a deck card naming one of these as baseId keeps its id
+const BASE_BY_ID = Object.fromEntries([...BASE_CARDS, ...Object.values(EXPANSIONS).flat()].map((d) => [d.id, d]));
 
-export const LIMITS = { cards: 80, copies: 10, minTotal: 20, maxTotal: 200, name: 32, deckName: 40, text: 240, label: 40, depth: 4 };
+export const LIMITS = { cards: 120, copies: 10, minTotal: 20, maxTotal: 200, name: 32, deckName: 40, text: 240, label: 40, depth: 4 };
 export const KINDS = ['companion', 'device', 'monster'];
 export const TAGS = ['companion', 'equipment', 'action', 'gem'];
 export const ZONES = ['hand', 'playArea', 'discard'];
-export const FLAGS = ['ignoreMonsterTunnels', 'ignoreCrystalCaves'];
+export const FLAGS = ['ignoreMonsterTunnels', 'ignoreCrystalCaves', 'waterBreathing'];
 export const HAS = ['crown', 'artifact', 'monkeyIdol', 'chalice'];
+export const WHERE = ['depths', 'crystal'];
+
+// End-game bonus: { perCard: id, points } | { perGold: n, points } | { mastery: true, points } | { treasures: n, points } | { marketItems: n, points }
+function cleanEndScore(v, where) {
+  if (!v) return null;
+  const points = int(v.points, 1, 20, `${where}: end-game points`);
+  if (v.perCard) { if (!/^[a-z0-9_]{1,40}$/.test(v.perCard)) bad(`${where}: bad card id for end-game points`); return { perCard: v.perCard, points }; }
+  if (v.perGold) return { perGold: int(v.perGold, 1, 20, `${where}: gold per point`), points };
+  if (v.mastery) return { mastery: true, points };
+  if (v.treasures) return { treasures: int(v.treasures, 1, 3, `${where}: treasures needed`), points };
+  if (v.marketItems) return { marketItems: int(v.marketItems, 1, 6, `${where}: market items needed`), points };
+  bad(`${where}: unknown end-game bonus`);
+}
 // numeric effect keys and their allowed range
-const NUM = { skill: [0, 10], swords: [0, 10], boots: [0, 10], gold: [0, 10], heal: [0, 10], clank: [-10, 10], draw: [0, 5], teleport: [0, 3], othersClank: [0, 5], allClank: [0, 5], gemDiscount: [0, 5] };
-const BOOL = ['dragonAttack', 'replaceRow', 'takeAdjacentSecret', 'skillPerClank', 'returnDragonCubes'];
+const NUM = { skill: [0, 10], swords: [0, 10], boots: [0, 10], gold: [0, 10], heal: [0, 10], clank: [-10, 10], draw: [0, 5], teleport: [0, 3], othersClank: [0, 5], allClank: [0, 5], gemDiscount: [0, 5], goldBonus: [0, 5], returnDragonCubes: [0, 10], rage: [-3, 3] };
+const BOOL = ['dragonAttack', 'replaceRow', 'takeAdjacentSecret', 'skillPerClank', 'returnToHand'];
 // the order applyEffect handles keys in; one effect object is split into single-key "atoms" in this order
-const ORDER = ['skill', 'swords', 'boots', 'gold', 'heal', 'clank', 'draw', 'teleport', 'dragonAttack', 'othersClank', 'allClank', 'flag', 'gemDiscount', 'returnDragonCubes', 'skillPerClank', 'buyTomes', 'when', 'choose', 'discardThen', 'trash', 'replaceRow', 'takeAdjacentSecret'];
+const ORDER = ['skill', 'swords', 'boots', 'gold', 'heal', 'clank', 'draw', 'teleport', 'dragonAttack', 'othersClank', 'allClank', 'flag', 'gemDiscount', 'goldBonus', 'returnDragonCubes', 'rage', 'skillPerClank', 'buyTomes', 'freeAcquire', 'when', 'choose', 'discardThen', 'trash', 'replaceRow', 'takeAdjacentSecret', 'returnToHand'];
 // which effect lists each kind of card may have
-const SLOTS = { companion: ['play', 'acquire', 'arrive'], device: ['use', 'acquire', 'arrive'], monster: ['defeat', 'arrive'] };
+const SLOTS = { companion: ['play', 'acquire', 'arrive', 'discard'], device: ['use', 'acquire', 'arrive'], monster: ['defeat', 'arrive'] };
 
 const int = (v, lo, hi, what) => {
   const n = Number(v);
@@ -59,13 +73,19 @@ export function cleanEffects(list, where, depth = 0) {
     for (const k of ORDER) {
       if (!(k in e)) continue;
       const v = e[k];
-      if (k in NUM) { const n = int(v, NUM[k][0], NUM[k][1], `${where}: ${k}`); if (n) out.push({ [k]: n }); }
+      if (k in NUM) { const n = int(k === 'returnDragonCubes' && v === true ? 3 : v, NUM[k][0], NUM[k][1], `${where}: ${k}`); if (n) out.push({ [k]: n }); }
       else if (BOOL.includes(k)) { if (v) out.push({ [k]: true }); }
       else if (k === 'flag') { if (!FLAGS.includes(v)) bad(`${where}: unknown flag "${v}"`); out.push({ flag: v }); }
       else if (k === 'buyTomes') out.push({ buyTomes: { gold: int(v?.gold, 0, 20, `${where}: tome price`), count: int(v?.count, 1, 3, `${where}: tome count`) } });
-      else if (k === 'when') {
+      else if (k === 'freeAcquire') {
+        const f = { max: int(v?.max, 0, 20, `${where}: free card's highest cost`) };
+        if (v?.tag) { if (!TAGS.includes(v.tag)) bad(`${where}: unknown card type "${v.tag}"`); f.tag = v.tag; }
+        out.push({ freeAcquire: f });
+      } else if (k === 'when') {
         let cond;
         if (v?.otherCompanion) cond = { otherCompanion: true };
+        else if (v?.inFlooded) cond = { inFlooded: true };
+        else if (v?.inPlayOrDiscard) { if (!/^[a-z0-9_]{1,40}$/.test(v.inPlayOrDiscard)) bad(`${where}: bad card id in condition`); cond = { inPlayOrDiscard: v.inPlayOrDiscard }; }
         else if (HAS.includes(v?.has)) cond = { has: v.has };
         else bad(`${where}: unknown condition`);
         out.push({ when: cond, effects: cleanEffects(e.effects, `${where} (if)`, depth + 1) });
@@ -74,6 +94,7 @@ export function cleanEffects(list, where, depth = 0) {
         out.push({ choose: v.map((o, i) => {
           const opt = { label: str(o?.label, LIMITS.label, `${where}: option ${i + 1} label`, { required: true }), effects: cleanEffects(o?.effects, `${where} (option ${i + 1})`, depth + 1) };
           if (o?.requires?.gold) opt.requires = { gold: int(o.requires.gold, 1, 20, `${where}: option ${i + 1} gold cost`) };
+          if (o?.requires?.flooded) opt.requires = { ...opt.requires, flooded: true };
           return opt;
         }) });
       } else if (k === 'discardThen') out.push({ discardThen: cleanEffects(v, `${where} (after discarding)`, depth + 1) });
@@ -99,7 +120,7 @@ export function cleanCard(raw, i = 0) {
   if (!/^[a-z0-9_]{1,40}$/.test(id)) bad(`${where}: id must be 1-40 lowercase letters, digits or _`);
   if (!KINDS.includes(raw.kind)) bad(`${where}: kind must be one of ${KINDS.join(', ')}`);
   const c = { id, name, kind: raw.kind };
-  if (raw.baseId) { if (!BASE_BY_ID[raw.baseId]) bad(`${where}: unknown base card "${raw.baseId}"`); c.baseId = raw.baseId; }
+  if (raw.baseId && BASE_BY_ID[raw.baseId]) c.baseId = raw.baseId; // a base card that no longer exists just becomes a custom card
   const tags = Array.isArray(raw.tags) ? TAGS.filter((t) => raw.tags.includes(t)) : [];
   if (raw.kind === 'companion' && tags.length) c.tags = tags;
   c.qty = int(raw.qty ?? 1, 1, LIMITS.copies, `${where}: copies`);
@@ -108,8 +129,11 @@ export function cleanCard(raw, i = 0) {
   c.points = int(raw.points ?? 0, -5, 20, `${where}: points`);
   if (raw.dragon) c.dragon = true;
   if (raw.danger) c.danger = true;
+  if (raw.where) { if (!WHERE.includes(raw.where)) bad(`${where}: unknown place "${raw.where}"`); c.where = raw.where; }
+  const es = cleanEndScore(raw.endScore, where);
+  if (es) c.endScore = es;
   c.text = str(raw.text, LIMITS.text, `${where}: text`);
-  for (const slot of ['play', 'use', 'defeat', 'acquire', 'arrive']) {
+  for (const slot of ['play', 'use', 'defeat', 'acquire', 'arrive', 'discard']) {
     if (raw[slot] == null || (Array.isArray(raw[slot]) && !raw[slot].length)) continue;
     if (!SLOTS[raw.kind].includes(slot)) bad(`${where}: a ${raw.kind} cannot have "${slot}" effects`);
     const list = cleanEffects(raw[slot], `${where} (${slot})`);
@@ -140,6 +164,22 @@ export function baseCardData(d) {
 }
 
 export const BASE_DECK = Object.freeze({ id: 'base', name: 'Base game', builtin: true, cards: BASE_CARDS.map(baseCardData) });
+// Read-only decks that ship with the game: the base deck, and the base deck with each expansion shuffled in.
+const withSets = (id, name, sets) => Object.freeze({ id, name, builtin: true, cards: [...BASE_CARDS, ...sets.flat()].map(baseCardData) });
+export const BUILTIN_DECKS = [
+  BASE_DECK,
+  withSets('sunken-treasures', 'Base + Sunken Treasures', [EXPANSIONS.sunken]),
+  withSets('promos', 'Base + Promos', [EXPANSIONS.promos]),
+  withSets('everything', 'Base + Sunken Treasures + Promos', [EXPANSIONS.sunken, EXPANSIONS.promos]),
+];
+export const BUILTIN_BY_ID = Object.fromEntries(BUILTIN_DECKS.map((d) => [d.id, d]));
+
+// Does this deck need flooded rooms on the board? (any card that mentions water)
+export function needsFlooding(deck) {
+  const walk = (list) => (list || []).some((e) => e.flag === 'waterBreathing' || e.when?.inFlooded || walk(e.effects) || walk(e.discardThen)
+    || (e.choose || []).some((o) => o.requires?.flooded || walk(o.effects)));
+  return deck.cards.some((c) => ['play', 'use', 'defeat', 'acquire', 'arrive', 'discard'].some((s) => walk(c[s])));
+}
 
 // What decides a card's identity at runtime: everything except deck bookkeeping.
 const essence = (c) => { const { id, baseId, qty, ...rest } = c; return rest; };
@@ -155,10 +195,7 @@ export function registerDeck(deck) {
     const body = essence(c);
     const id = 'x_' + crypto.createHash('sha1').update(JSON.stringify(body)).digest('hex').slice(0, 12);
     if (!CARD_DEFS[id]) {
-      const d = { id, ...body, qty: c.qty, custom: true };
-      // an edited base card keeps its special scoring rule, if it had one
-      if (base?.endGamePoints) d.endGamePoints = base.endGamePoints;
-      CARD_DEFS[id] = d;
+      CARD_DEFS[id] = { id, ...body, qty: c.qty, custom: true };
     }
     list.push({ id, qty: c.qty });
     custom.push(id);

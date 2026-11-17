@@ -1,9 +1,9 @@
-// Saved decks: one JSON file per deck in data/decks (or $CLANK_DATA/decks). The base deck is built in and read-only.
+// Saved decks: one JSON file per deck in data/decks (or $CLANK_DATA/decks). Built-in decks (base game, expansions) are read-only.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { BASE_DECK, cleanDeck, DeckError } from './game/cards/decks.js';
+import { BASE_DECK, BUILTIN_DECKS, BUILTIN_BY_ID, cleanDeck, DeckError } from './game/cards/decks.js';
 
 const ROOT = process.env.CLANK_DATA || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data');
 const DIR = path.join(ROOT, 'decks');
@@ -26,18 +26,19 @@ export function listDecks() {
   let ids = [];
   try { ids = fs.readdirSync(DIR).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)).filter((id) => ID_RE.test(id)); } catch { /* no decks yet */ }
   const decks = ids.map(readDeck).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
-  return [BASE_DECK, ...decks].map(summary);
+  return [...BUILTIN_DECKS, ...decks].map(summary);
 }
 
 export function getDeck(id) {
-  if (!id || id === BASE_DECK.id) return BASE_DECK;
+  if (!id) return BASE_DECK;
+  if (BUILTIN_BY_ID[id]) return BUILTIN_BY_ID[id];
   if (!ID_RE.test(id)) return null;
   return readDeck(id);
 }
 
 // Create (no id) or overwrite (id) a deck. Returns the saved deck.
 export function saveDeck(raw, id = null) {
-  if (id === BASE_DECK.id) throw new DeckError('The base deck is read-only: clone it to make changes');
+  if (BUILTIN_BY_ID[id]) throw new DeckError('Built-in decks are read-only: clone one to make changes');
   if (id && (!ID_RE.test(id) || !fs.existsSync(file(id)))) throw new DeckError('No such deck');
   const deck = cleanDeck(raw);
   if (!id) {
@@ -53,7 +54,7 @@ export function saveDeck(raw, id = null) {
 }
 
 export function deleteDeck(id) {
-  if (id === BASE_DECK.id) throw new DeckError('The base deck cannot be deleted');
+  if (BUILTIN_BY_ID[id]) throw new DeckError('Built-in decks cannot be deleted');
   if (!ID_RE.test(id || '') || !fs.existsSync(file(id))) throw new DeckError('No such deck');
   fs.unlinkSync(file(id));
 }

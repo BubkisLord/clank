@@ -38,6 +38,7 @@ export function applyEffect(game, p, e, card) {
   if (e.othersClank) for (const o of game.players) if (o !== p && o.status === 'in') game.addClank(o, e.othersClank);
   if (e.allClank) for (const o of game.players) if (o.status === 'in') game.addClank(o, e.allClank);
   if (e.flag) { if (mine) t.flags[e.flag] = true; }
+  if (e.clearScent) game.clearScent(p);
   if (e.gemDiscount) { if (mine) t.gemDiscount += e.gemDiscount; }
   if (e.goldBonus) { if (mine) t.goldBonus += e.goldBonus; }
   if (e.returnDragonCubes) {

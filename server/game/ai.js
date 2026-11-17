@@ -156,7 +156,8 @@ function routeCosts(game, p, from, { reverse = false } = {}) {
             if (t.locked && !p.items.masterKey) continue;
             const room = game.board.room(reverse ? u : t.to);
             const swim = room.flooded && game.board.room(reverse ? t.to : u)?.flooded;
-            const c = (swim ? Math.max(2, t.boots || 1) : (t.boots || 1)) + (t.monsters || 0) * 1.3 + (room.crystal ? 1.2 : 0) + (room.flooded ? 0.4 : 0);
+            const c = (swim ? Math.max(2, t.boots || 1) : (t.boots || 1)) + (t.monsters || 0) * 1.3 + (room.crystal ? 1.2 : 0) + (room.flooded ? 0.4 : 0)
+                + (game.dragonToken ? (room.id === game.dragonToken.room ? 4 : game.board.connectedRooms(room.id).includes(game.dragonToken.room) ? 0.8 : 0) : 0); // keep clear of the hunting dragon
             if (dist[u] + c < (dist[t.to] ?? Infinity)) { dist[t.to] = dist[u] + c; prev[t.to] = u; }
         }
     }
@@ -338,7 +339,14 @@ export function nextAction(game, p) {
     // 2. play the whole hand
     if (p.hand.length) return { type: 'playAll' };
 
-    const target = chooseTarget(game, p);
+    let target = chooseTarget(game, p);
+    // underwater since the start of the turn: surface first (nearest dry room), or take a damage at the end of the turn
+    if (game.turn?.noAir && !game.turn.flags.waterBreathing && game.board.room(p.room)?.flooded) {
+        const dist = routeCosts(game, p, p.room).dist;
+        const dry = Object.keys(dist).filter((id) => { const r = game.board.room(id); return r && !r.flooded && !r.start; }).sort((a, b) => dist[a] - dist[b])[0];
+        if (dry && game.board.room(target?.room)?.flooded !== false) target = { room: dry, why: 'air' };
+        else if (dry && dist[target.room] > dist[dry] + 2) target = { room: dry, why: 'air' };
+    }
 
     // 3. loot in this room
     if (L.canTakeArtifact && (target?.room === p.room || (!p.artifacts.length && (p.damage >= 5 || lvl.careless || ((S.grab || paceOf(game).grab) && game.rooms[p.room].artifact >= Math.min(S.grab || 99, paceOf(game).grab || 99)))))) return { type: 'takeArtifact' };

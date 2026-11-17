@@ -255,13 +255,33 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('dlShe
 // Dragon attacks are numbered by the server; every one newer than the last we saw gets a banner,
 // queued so two attacks in one update both show.
 let seenAttack, seenCode, wasMyTurn = false, bannerBusy = false;
+// Personal warnings (e.g. the dragon has found you) pop up until dismissed.
+let seenAlert = 0, seenAlertCode;
+const alertQueue = [];
+// "The dragon heard you": a short warning that does not block play
+let heardTimer;
+function showHeard(a) {
+  const el = $('heardNote');
+  el.innerHTML = `<img src="assets/dragon.svg" alt=""><div><b>${esc(a.title)}</b><span>${esc(a.text)}</span></div>`;
+  el.classList.remove('hidden', 'show'); void el.offsetWidth; el.classList.add('show');
+  clearTimeout(heardTimer); heardTimer = setTimeout(() => el.classList.add('hidden'), 6000);
+}
+function showNextAlert() {
+  const el = $('huntAlert');
+  if (!el.classList.contains('hidden') || !alertQueue.length) return;
+  const a = alertQueue.shift();
+  el.innerHTML = `<img src="assets/dragon.svg" alt=""><div><b>${esc(a.title)}</b><p>${esc(a.text)}</p><button class="primary" id="huntOk">Got it</button></div>`;
+  el.classList.remove('hidden');
+  $('huntOk').onclick = () => { el.classList.add('hidden'); showNextAlert(); };
+  $('huntOk').focus({ preventScroll: true });
+}
 const bannerQueue = [];
 function showNextBanner() {
   if (bannerBusy || !bannerQueue.length) return;
   bannerBusy = true;
   const a = bannerQueue.shift();
   const name = (pid) => esc(state.players.find((p) => p.id === pid)?.name ?? '?');
-  const hits = a.hits?.length ? a.hits.map((h) => `${h.pid === me ? '<em>You</em>' : name(h.pid)} take${h.pid === me ? '' : 's'} ${h.dmg} damage`).join(' · ') : 'Nobody was hurt';
+  const hits = a.hits?.length ? a.hits.map((h) => `${h.pid === me ? '<em>You</em>' : name(h.pid)} take${h.pid === me ? '' : 's'} ${h.dmg} damage${h.doubled ? ' (doubled: the dragon is in the room)' : ''}`).join(' · ') : 'Nobody was hurt';
   const el = $('banner');
   el.innerHTML = `<img src="assets/dragon.svg" alt=""><div><b>The dragon attacks!</b><span>${a.n} cube${a.n === 1 ? '' : 's'} drawn: ${a.drawn.map((c) => `<i style="background:${COLOR[c] || '#111'}"></i>`).join('') || 'the bag was empty'}</span><span class="hits">${hits}</span></div>`;
   el.classList.toggle('hurt', !!a.hits?.some((h) => h.pid === me));
@@ -273,6 +293,10 @@ function showNextBanner() {
 function announce() {
   if (seenCode !== state.code) { seenCode = state.code; seenAttack = state.attackSeq ?? 0; } // do not replay old attacks on join
   for (const a of state.attacks || []) if (a.seq > seenAttack) bannerQueue.push(a);
+  if (seenAlertCode !== state.code) { seenAlertCode = state.code; seenAlert = state.alertSeq ?? 0; }
+  for (const a of state.alerts || []) if (a.seq > seenAlert) { if (a.kind === 'heard') showHeard(a); else alertQueue.push(a); }
+  seenAlert = Math.max(seenAlert, state.alertSeq ?? 0);
+  showNextAlert();
   seenAttack = Math.max(seenAttack, state.attackSeq ?? 0);
   showNextBanner();
   const mine = isMyTurn();
@@ -296,18 +320,24 @@ function render() {
     $('startBtn').disabled = !host;
     const o = state.options || {};
     const dis = host ? '' : 'disabled';
-    const seg = (key, cur, items) => `<div class="seg">${items.map(([v, l, tip]) => `<button data-opt="${key}" data-val="${v}" class="${cur === v ? 'on' : ''}" title="${tip}" ${dis}>${l}</button>`).join('')}</div>`;
+    const seg = (key, cur, items, cls = '') => `<div class="seg ${cls}">${items.map(([v, l, tip]) => `<button data-opt="${key}" data-val="${v}" class="${cur === v ? 'on' : ''}" title="${tip}" ${dis}>${l}</button>`).join('')}</div>`;
     $('options').innerHTML = `<span class="opt-l">Deck</span><div class="deck-pick">${host
         ? `<select id="deckSel" title="Which cards stock the dungeon deck">${(deckList || [{ id: o.deck, name: o.deckName }]).map((d) => `<option value="${esc(d.id)}" ${d.id === o.deck ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select>`
         : `<b>${esc(o.deckName || 'Base game')}</b>`}</div>`
       + `<span class="opt-l">Game</span>`
       + seg('map', o.map, [['random', 'Random dungeon', 'A new dungeon layout every game'], ['classic', 'Classic map', 'The standard board']])
       + seg('autoEnd', o.autoEnd ? '1' : '0', [['1', 'Auto-end', 'End your turn automatically once your hand is empty'], ['0', 'Manual', 'Press End turn yourself']])
+      + `<span class="opt-l">Dragon</span>`
+      + seg('dragonPresence', o.dragonPresence ? '1' : '0', [['0', 'Classic', 'The dragon only attacks from its lair, as in the board game'], ['1', 'Dragon Presence', 'A dragon token prowls the Depths, hunting by sound: Clank! you make down there draws it to you. Its attacks deal double damage to anyone in its room.']], 'wide')
+      + (o.dragonPresence ? `<span class="opt-l">Awareness</span>` + seg('dragonAwareness', o.dragonAwareness || 'stirring', [
+        ['slumbering', 'Slumbering', 'Drowsy: moves 1 room a round, only hears Clank! within 3 rooms, forgets fast, and loses a thief\'s scent after 1 round'],
+        ['stirring', 'Stirring', 'Restless: moves 1 room a round (2 once someone escapes), hears the whole Depths, and follows a found thief\'s scent for 2 rounds'],
+        ['awake', 'Wide awake', 'Ravenous: moves 2 rooms a round (3 once someone escapes), remembers noise longer, and follows a found thief\'s scent for 3 rounds']], 'wide') : '')
       + (state.players.some((p) => p.bot) ? `<span class="opt-l">Bots</span>`
         + seg('botLevel', o.botLevel || 'medium', [['easy', 'Easy', 'Sloppy: misjudges cards, wounds and prompts'], ['medium', 'Medium', 'Solid, straightforward play'], ['hard', 'Hard', 'Plans detours and races rivals to artifacts']])
         + seg('botPace', o.botPace || 'mixed', [['reckless', 'Reckless', 'Bots grab the nearest artifact and run: shorter games'], ['mixed', 'Mixed', 'A mix of fast and slow bots'], ['patient', 'Patient', 'Bots build their decks and delve deep: longer games']]) : '');
     if ($('deckSel')) { $('deckSel').onchange = (e) => send({ type: 'option', key: 'deck', value: e.target.value }); if (!deckList) loadDeckList(); }
-    $('options').querySelectorAll('[data-opt]').forEach((b) => { b.onclick = () => send({ type: 'option', key: b.dataset.opt, value: b.dataset.opt === 'autoEnd' ? b.dataset.val === '1' : b.dataset.val }); });
+    $('options').querySelectorAll('[data-opt]').forEach((b) => { b.onclick = () => send({ type: 'option', key: b.dataset.opt, value: ['autoEnd', 'dragonPresence'].includes(b.dataset.opt) ? b.dataset.val === '1' : b.dataset.val }); });
     return;
   }
   $('waiting').classList.add('hidden'); $('game').classList.remove('hidden');
@@ -478,6 +508,9 @@ function renderBoard() {
       else if (!teleportMode && tele.has(r.id) && !(m && m.ok)) { cls.push('can-teleport'); click = `data-tp="${r.id}"`; }
     }
     if (mp && mp.room === r.id && mp.status === 'in') cls.push('here');
+    const dt = state.dragonToken;
+    if (dt?.room === r.id) cls.push('dragon-here');
+    else if (dt?.target === r.id) cls.push('dragon-target');
     const info = [];
     if (rs.artifact) info.push(`🏺 ${rs.artifact}`);
     if (rs.majorSecret) info.push('★ Major Secret');
@@ -496,6 +529,9 @@ function renderBoard() {
       ${r.flooded && tileFor(r) !== 'flooded' ? `<image href="assets/tiles/flood-overlay.png" x="${rx}" y="${ry}" width="${W}" height="${H}" preserveAspectRatio="xMidYMax slice" clip-path="url(#clip-${r.id})"/>` : ''}
       <rect x="${rx}" y="${ry}" width="${W}" height="${H}" rx="12" class="${cls.join(' ')}${r.flooded ? ' flooded' : ''}"/>
       <text x="${r.x}" y="${r.y + 6}" class="rname">${esc(r.name)}</text><text x="${r.x}" y="${r.y + 26}" class="rinfo">${info.join('   ')}</text></g>`;
+    if (state.dragonToken?.room === r.id) s += `<g class="dragon-token"><title>The dragon is here. Its attacks hit anyone in this room for double damage.</title><circle cx="${rx + W - 14}" cy="${ry + 4}" r="19"/><image href="assets/dragon.svg" x="${rx + W - 30}" y="${ry - 12}" width="32" height="32"/></g>`;
+    if (state.dragonToken?.next && state.dragonToken.next === r.id && state.dragonToken.next !== state.dragonToken.room) s += `<g class="dragon-next"><title>Foreseen: the dragon moves here next</title><text x="${rx + 16}" y="${ry + H - 8}">🔮</text></g>`;
+    if (state.dragonToken?.room !== r.id && state.dragonToken?.target === r.id) s += `<g class="dragon-ear"><title>The dragon heard Clank! here and is heading this way</title><text x="${rx + W - 14}" y="${ry + 10}">👂</text></g>`;
     const here = state.players.filter((p) => p.room === r.id && p.status === 'in');
     here.forEach((p, i) => { const cx = rx + 16 + i * 24, cy = ry + 2; const cur = p.id === state.currentPlayer; s += `<g class="pawn-g">${cur ? `<circle cx="${cx}" cy="${cy}" r="11" class="pawn-ring" fill="none" stroke="${COLOR[p.color]}"/>` : ''}<circle cx="${cx}" cy="${cy}" r="11" class="pawn" fill="${COLOR[p.color]}"><title>${esc(p.name)}${cur ? ' (taking their turn)' : ''}</title></circle><text x="${cx}" y="${cy + 4}" class="pawn-l">${esc(p.name[0].toUpperCase())}</text></g>`; });
   }
@@ -520,12 +556,18 @@ function renderHud(moves, tele) {
   let h = '';
   if (mp.status === 'in') {
     const feats = [r.crystal ? '💎 Crystal cave' : '', r.market ? '🛒 Market' : '', r.fountain ? '⛲ Fountain' : '', r.flooded ? '🌊 Flooded' : '', r.depths ? 'in the Depths' : '', r.start ? 'outside the dungeon' : ''].filter(Boolean).join(' · ');
+    const dt = state.dragonToken;
+    const scent = dt?.scent?.pid === me && dt.room !== mp.room ? `<div class="m hunt">🐉 The dragon has your scent: it can follow you for ${plural(dt.scent.rounds, 'more round')} even if you stay quiet. The surface is safe.</div>` : '';
+    const coming = dt && dt.room !== mp.room && dt.target === mp.room ? '<div class="m hunt">🐉 The dragon heard noise in this room and is heading here.</div>' : '';
+    const seen = dt?.next ? `<div class="m">🔮 The dragon will move to ${esc(room(dt.next)?.name || '?')} next${dt.next === dt.room ? ' (it stays put)' : ''}.</div>` : '';
+    const hunt = !dt ? '' : dt.room === mp.room ? '<div class="m hunt">🐉 The dragon is in this room: its attacks hit you for double damage. Get away!</div>'
+      : (b => b.tunnels.some((tn) => (tn.from === mp.room && tn.to === dt.room) || (tn.to === mp.room && tn.from === dt.room)))(state.board) ? '<div class="m hunt near">🐉 The dragon is in the next room. Keep quiet.</div>' : '';
     const air = isMyTurn() && t?.noAir ? `<div class="m air">🫧 Out of air: reach a dry room this turn${t.flags.waterBreathing ? ' (or not: you can breathe underwater)' : ' or take 1 damage'}</div>` : '';
-    h += `<div class="hud"><div class="k">You are in</div><div class="v">${esc(r.name)}</div>${feats ? `<div class="m">${feats}</div>` : ''}${air}</div>`;
+    h += `<div class="hud"><div class="k">You are in</div><div class="v">${esc(r.name)}</div>${feats ? `<div class="m">${feats}</div>` : ''}${hunt}${coming}${scent}${seen}${air}</div>`;
   }
   if (isMyTurn() && !state.pending) {
     const exhausted = t.enteredCrystalCave && !t.flags.ignoreCrystalCaves;
-    const rows = [...moves.values()].map((m) => `<div class="r ${m.ok ? '' : 'dim'}"><b>${m.shortcut ? '⤴ ' : ''}${room(m.to).name}</b><span>${m.ok ? `${m.cost}👢${m.damage ? ` ${m.damage}💔` : ''}${m.monsters && !m.damage ? ' ⚔' : ''}${m.shortcut ? ' shortcut' : ''}` : exhausted ? '' : m.reason}</span></div>`).join('');
+    const rows = [...moves.values()].map((m) => `<div class="r ${m.ok ? '' : 'dim'}"><b>${m.shortcut ? '⤴ ' : ''}${state.dragonToken?.room === m.to ? '🐉 ' : ''}${room(m.to).name}</b><span>${m.ok ? `${m.cost}👢${m.damage ? ` ${m.damage}💔` : ''}${m.monsters && !m.damage ? ' ⚔' : ''}${m.shortcut ? ' shortcut' : ''}` : exhausted ? '' : m.reason}</span></div>`).join('');
     const tp = tele.size ? `<div class="m">✨ ${tele.size} room${tele.size > 1 ? 's' : ''} by teleport</div>` : '';
     h += `<div class="hud tunnels"><div class="k">${exhausted ? 'Exhausted — no more boots' : 'Tunnels from here'}</div>${rows}${tp}</div>`;
   } else if (state.pending && state.pending.pid !== me) {

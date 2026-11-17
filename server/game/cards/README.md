@@ -53,6 +53,8 @@ Effects are plain objects processed by `../effects.js`. Available keys:
 | `{ goldBonus: 1 }` | each time you gain gold this turn, gain n more (Search) |
 | `{ rage: 1 }` | move the Dragon marker n spaces (negative moves it down) |
 | `{ freeAcquire: { max: 3, tag? } }` | take a non-monster Dungeon Row card costing up to max for free (optionally only one subtype) |
+| `{ clearScent: true }` | Dragon Presence: the dragon loses your scent and forgets noise you made |
+| `{ flag: 'foreseeDragon' }` | Dragon Presence: you see the dragon's next move this turn |
 | `{ returnToHand: true }` | put this card back into your hand (use in a `discard` slot) |
 | `{ fn: (game, player, card) => void }` | escape hatch for anything else |
 

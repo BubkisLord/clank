@@ -25,7 +25,7 @@ export const LIMITS = { cards: 120, copies: 10, minTotal: 20, maxTotal: 200, nam
 export const KINDS = ['companion', 'device', 'monster'];
 export const TAGS = ['companion', 'equipment', 'action', 'gem'];
 export const ZONES = ['hand', 'playArea', 'discard'];
-export const FLAGS = ['ignoreMonsterTunnels', 'ignoreCrystalCaves', 'waterBreathing'];
+export const FLAGS = ['ignoreMonsterTunnels', 'ignoreCrystalCaves', 'waterBreathing', 'foreseeDragon'];
 export const HAS = ['crown', 'artifact', 'monkeyIdol', 'chalice'];
 export const WHERE = ['depths', 'crystal'];
 
@@ -42,9 +42,9 @@ function cleanEndScore(v, where) {
 }
 // numeric effect keys and their allowed range
 const NUM = { skill: [0, 10], swords: [0, 10], boots: [0, 10], gold: [0, 10], heal: [0, 10], clank: [-10, 10], draw: [0, 5], teleport: [0, 3], othersClank: [0, 5], allClank: [0, 5], gemDiscount: [0, 5], goldBonus: [0, 5], returnDragonCubes: [0, 10], rage: [-3, 3] };
-const BOOL = ['dragonAttack', 'replaceRow', 'takeAdjacentSecret', 'skillPerClank', 'returnToHand'];
+const BOOL = ['dragonAttack', 'replaceRow', 'takeAdjacentSecret', 'skillPerClank', 'returnToHand', 'clearScent'];
 // the order applyEffect handles keys in; one effect object is split into single-key "atoms" in this order
-const ORDER = ['skill', 'swords', 'boots', 'gold', 'heal', 'clank', 'draw', 'teleport', 'dragonAttack', 'othersClank', 'allClank', 'flag', 'gemDiscount', 'goldBonus', 'returnDragonCubes', 'rage', 'skillPerClank', 'buyTomes', 'freeAcquire', 'when', 'choose', 'discardThen', 'trash', 'replaceRow', 'takeAdjacentSecret', 'returnToHand'];
+const ORDER = ['skill', 'swords', 'boots', 'gold', 'heal', 'clank', 'draw', 'teleport', 'dragonAttack', 'othersClank', 'allClank', 'flag', 'gemDiscount', 'goldBonus', 'returnDragonCubes', 'rage', 'skillPerClank', 'buyTomes', 'freeAcquire', 'when', 'choose', 'discardThen', 'trash', 'replaceRow', 'takeAdjacentSecret', 'returnToHand', 'clearScent'];
 // which effect lists each kind of card may have
 const SLOTS = { companion: ['play', 'acquire', 'arrive', 'discard'], device: ['use', 'acquire', 'arrive'], monster: ['defeat', 'arrive'] };
 

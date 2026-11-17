@@ -367,3 +367,131 @@ test('"choose two" asks twice and never offers the same option again (Wishing We
   assert.equal(g.pending, null);
   assert.equal(g.turn.boots, 2); assert.equal(g.turn.swords, 2);
 });
+
+// ---------- Dragon Presence ----------
+test('Dragon Presence is off by default; when on, the dragon starts at the nest and never leaves the Depths', () => {
+  assert.equal(setup().dragonToken, null);
+  for (const map of ['classic', 'random']) {
+    const g = setup(2, { dragonPresence: true, map });
+    const d = g.dragonToken;
+    assert.equal(g.board.room(d.room).artifact, 30, `${map}: starts on the nest`);
+    for (let i = 0; i < 60; i++) { g.dragonStep(); assert.ok(g.board.room(d.room).depths, `${map}: stays in the Depths`); }
+  }
+});
+
+
+test('a dragon attack hits double while you share the dragon\'s room', () => {
+  const g = setup(2, { dragonPresence: true });
+  const p = g.players[1];
+  p.room = g.dragonToken.room;
+  g.bag = { black: 0, [g.players[0].id]: 0, [p.id]: 2 };
+  for (const id of Object.keys(g.clankArea)) g.clankArea[id] = 0; // only p's two cubes can be drawn
+  g.rage = 0; // draws 2
+  g.dungeonRow = g.dungeonRow.map(() => null);
+  g.dragonAttack(0, 'test');
+  assert.equal(p.damage, 4);
+  assert.ok(g.lastAttack.hits.find((h) => h.pid === p.id).doubled);
+});
+
+test('bot games with Dragon Presence play to the end', async () => {
+  const { nextAction } = await import('../server/game/ai.js');
+  for (let run = 0; run < 6; run++) {
+    const g = new Game('DP');
+    for (let i = 0; i < 3; i++) g.addPlayer(`B${i}`, { bot: true });
+    g.players.forEach((p) => { p.bot ||= { style: 'balanced' }; });
+    g.setOption('dragonPresence', true);
+    g.start();
+    let steps = 0;
+    while (g.phase === 'playing' && steps++ < 20000) {
+      const actor = g.pending ? g.playerById(g.pending.pid) : g.currentPlayer();
+      const a = nextAction(g, actor) || { type: 'endTurn' };
+      try { g.act(actor.id, a); } catch (e) {
+        if (e.constructor.name !== 'GameError') throw e;
+        if (g.pending) g.act(g.pending.pid, { type: 'resolve', value: g.pending.options[0].value }); else g.act(actor.id, { type: 'endTurn' });
+      }
+    }
+    assert.equal(g.phase, 'ended');
+    assert.ok(g.board.room(g.dragonToken.room).depths);
+  }
+});
+
+// helpers: a depths room n steps from the dragon
+const roomAt = (g, n, from = g.dragonToken.room) => { const dist = g.dragonDistances(from); return Object.keys(dist).find((id) => dist[id] === n); };
+
+test('the dragon hears Clank! in the Depths, heads for it and warns whoever made it', () => {
+  const g = setup(2, { dragonPresence: true });
+  const [a, b] = g.players;
+  const d = g.dragonToken;
+  b.room = roomAt(g, 2);
+  g.addClank(a, 3); // a is outside the dungeon: the surface is out of earshot
+  assert.equal(Object.keys(d.leads).length, 0);
+  g.addClank(b, 2);
+  assert.equal(d.target, b.room);
+  assert.equal(g.stateFor(b.id).alerts.at(-1).title, 'The dragon heard you!');
+  assert.equal(g.stateFor(b.id).alerts.at(-1).kind, 'heard');
+  assert.equal(g.stateFor(a.id).alerts.length, 0, 'only the noisy thief is told');
+  g.dragonStep(); g.dragonStep();
+  assert.equal(d.room, b.room);
+  assert.equal(d.scent.pid, b.id, 'found: it has their scent');
+  assert.equal(g.stateFor(b.id).alerts.at(-1).title, 'The dragon is hunting you!');
+});
+
+test('scent: it follows a quiet thief, but loud enough noise elsewhere draws it off', () => {
+  const g = setup(3, { dragonPresence: true, dragonAwareness: 'stirring' });
+  const [, b, c] = g.players;
+  const d = g.dragonToken;
+  b.room = d.room;
+  g.dragonStep(); // finds b
+  assert.equal(d.scent.pid, b.id);
+  b.room = roomAt(g, 2); // b slips away quietly
+  g.dragonAim();
+  assert.equal(d.target, b.room, 'follows the scent');
+  c.room = roomAt(g, 3);
+  g.addClank(c, 2); // quieter than the scent's pull (3)
+  assert.equal(d.target, b.room);
+  g.addClank(c, 2); // now 4: louder
+  assert.equal(d.target, c.room, 'drawn off by the noise');
+});
+
+test('scent fades even while it lurks with you, and then it loses interest instead of re-finding you', () => {
+  const g = setup(2, { dragonPresence: true, dragonAwareness: 'stirring' });
+  const p = g.players[1];
+  const d = g.dragonToken;
+  p.room = d.room;
+  g.dragonStep(); // found
+  g.dragonRound(); g.dragonRound(); // scent lasts 2 rounds
+  assert.equal(d.scent, null);
+  assert.ok(d.ignore[p.id]);
+  g.dragonRound();
+  assert.notEqual(d.room, p.room, 'it wandered off');
+});
+
+test('awareness: a slumbering dragon only hears nearby noise', () => {
+  const g = setup(2, { dragonPresence: true, dragonAwareness: 'slumbering' });
+  const p = g.players[1];
+  p.room = roomAt(g, 4); g.addClank(p, 3);
+  assert.equal(Object.keys(g.dragonToken.leads).length, 0);
+  p.room = roomAt(g, 2); g.addClank(p, 1);
+  assert.equal(g.dragonToken.leads[p.room].strength, 1);
+});
+
+test('card effects for Dragon Presence: cover your tracks, and foresee its next move', async () => {
+  const { cleanCard } = await import('../server/game/cards/decks.js');
+  const card = cleanCard({ id: 'x', name: 'Smoke Bomb', kind: 'companion', cost: 1, play: [{ clearScent: true }, { flag: 'foreseeDragon' }] });
+  assert.deepEqual(card.play, [{ clearScent: true }, { flag: 'foreseeDragon' }]);
+  const g = setup(2, { dragonPresence: true });
+  const p = cur(g);
+  const d = g.dragonToken;
+  p.room = roomAt(g, 2);
+  g.addClank(p, 2);
+  d.scent = { pid: p.id, rounds: 2 };
+  assert.equal(g.stateFor(p.id).dragonToken.next, undefined, 'hidden without the card');
+  g.queueFront(p, card.play, null); g.process();
+  assert.equal(d.scent, null);
+  assert.equal(Object.keys(d.leads).length, 0);
+  const seen = g.stateFor(p.id).dragonToken.next;
+  assert.ok(seen && g.board.connectedRooms(d.room).includes(seen));
+  assert.equal(g.stateFor(g.players.find((x) => x !== p).id).dragonToken.next, undefined, 'only for the player who played it');
+  g.dragonStep();
+  assert.equal(d.room, seen, 'the foreseen move is the move it makes');
+});

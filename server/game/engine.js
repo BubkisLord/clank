@@ -33,6 +33,18 @@ export function endScore(d, p, b) {
   return 0;
 }
 
+// Dragon Presence awareness levels.
+//   moves / wakeMoves: rooms per round, before / after the countdown starts
+//   range: how many rooms away it can hear Clank! (Infinity: anywhere in the Depths)
+//   fade: how much of each lead is left after a round; scent: rounds it can follow a thief it has found, even a quiet one
+//   scentPull: how loud (Clank! in one room) other noise must be to draw it off a scent
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+export const AWARENESS = {
+  slumbering: { label: 'Slumbering', moves: 1, wakeMoves: 1, range: 3, fade: 0.5, scent: 1, scentPull: 2 },
+  stirring: { label: 'Stirring', moves: 1, wakeMoves: 2, range: Infinity, fade: 0.6, scent: 2, scentPull: 3 },
+  awake: { label: 'Wide awake', moves: 2, wakeMoves: 3, range: Infinity, fade: 0.75, scent: 3, scentPull: 4.5 },
+};
+
 export class Game {
   constructor(code) {
     this.code = code;
@@ -42,9 +54,12 @@ export class Game {
     this.logSeq = 0;
     this.attacks = []; // recent dragon attacks, numbered so clients never miss one
     this.attackSeq = 0;
+    this.alerts = []; // per-player warnings shown as a popup (e.g. the dragon has found you)
+    this.alertSeq = 0;
+    this.dragonToken = null; // Dragon Presence: { room, prev, target, leads: { roomId: strength } }
     this.version = 0;
     this.createdAt = Date.now();
-    this.options = { map: 'random', autoEnd: true, botLevel: 'medium', botPace: 'mixed', deck: 'base', deckName: BASE_DECK.name };
+    this.options = { map: 'random', autoEnd: true, botLevel: 'medium', botPace: 'mixed', deck: 'base', deckName: BASE_DECK.name, dragonPresence: false, dragonAwareness: 'stirring' };
     this.deck = BASE_DECK;
     this.customCards = [];
   }
@@ -53,6 +68,8 @@ export class Game {
     if (this.phase !== 'lobby') fail('Options can only be changed before the game starts');
     if (key === 'map' && ['random', 'classic'].includes(value)) this.options.map = value;
     else if (key === 'autoEnd') this.options.autoEnd = !!value;
+    else if (key === 'dragonPresence') this.options.dragonPresence = !!value;
+    else if (key === 'dragonAwareness' && AWARENESS[value]) this.options.dragonAwareness = value;
     else if (key === 'botLevel' && LEVELS[value]) this.options.botLevel = value;
     else if (key === 'botPace' && PACES[value]) {
       this.options.botPace = value;
@@ -113,6 +130,13 @@ export class Game {
 
     const { list, custom } = registerDeck(this.deck);
     this.customCards = custom;
+    if (this.options.dragonPresence) {
+      const nest = this.board.rooms.find((r) => r.artifact === 30) || this.board.rooms.filter((r) => r.depths).at(-1);
+      this.dragonToken = { room: nest.id, prev: null, target: null, targetBy: null, why: null, next: null, leads: {}, scent: null, ignore: {} };
+      this.dragonSense = AWARENESS[this.options.dragonAwareness] || AWARENESS.stirring;
+      this.dragonAim();
+      this.log(`Dragon Presence (${this.dragonSense.label}): the dragon lies in ${nest.name}. It hunts the Depths by sound — every Clank! you make down there tells it where to look.`);
+    }
     if (needsFlooding(this.deck)) { this.board = floodBoard(this.board); this.log('Water has flooded parts of the Depths. Start your turn underwater and you must reach a dry room, or take 1 damage.'); }
     this.dungeonDeck = buildDungeonDeck(list);
     this.deckCounts = {}; // how many of each card the dungeon deck started with (public: it is the deck list)
@@ -274,6 +298,7 @@ export class Game {
         p.supply -= add;
         this.clankArea[p.id] += add;
         this.log(`${p.name} makes ${add} Clank!`);
+        this.dragonHears(p, add);
       }
     } else if (n < 0) {
       let r = -n;
@@ -308,7 +333,7 @@ export class Game {
   dragonAttack(extra = 0, reason = 'dungeon row') {
     for (const p of this.players) { this.bag[p.id] += this.clankArea[p.id]; this.clankArea[p.id] = 0; }
     const n = this.rageValue() + this.dangerCount() + extra;
-    const drawn = [];
+    const drawn = [], doubled = {};
     for (let i = 0; i < n; i++) {
       const keys = Object.keys(this.bag).filter((k) => this.bag[k] > 0);
       const total = keys.reduce((s, k) => s + this.bag[k], 0);
@@ -322,13 +347,167 @@ export class Game {
       drawn.push(p.color);
       if (p.status !== 'in') { p.supply++; continue; } // treated as black
       this.dealDamage(p, 1, 'dragon');
+      // Dragon Presence: sharing a room with the dragon doubles every hit (the extra comes from your supply)
+      if (this.dragonToken?.room === p.room && p.status === 'in' && p.supply > 0) { p.supply--; this.dealDamage(p, 1, 'the dragon is in the room'); doubled[p.id] = (doubled[p.id] || 0) + 1; }
     }
     this.log(`DRAGON ATTACK (${reason}): ${n} cube${n === 1 ? '' : 's'} drawn — ${drawn.length ? drawn.join(', ') : 'bag empty'}`);
     const hit = {};
     for (const c of drawn) if (c !== 'black') { const p = this.players.find((x) => x.color === c); if (p) hit[p.id] = (hit[p.id] || 0) + 1; }
-    this.lastAttack = { seq: ++this.attackSeq, n, drawn, reason, hits: Object.entries(hit).map(([pid, dmg]) => ({ pid, dmg })) };
+    for (const [pid, x] of Object.entries(doubled)) { hit[pid] += x; this.log(`${this.playerById(pid).name} shares a room with the dragon: double damage!`); }
+    this.lastAttack = { seq: ++this.attackSeq, n, drawn, reason, hits: Object.entries(hit).map(([pid, dmg]) => ({ pid, dmg, doubled: !!doubled[pid] })) };
     this.attacks.push(this.lastAttack);
     if (this.attacks.length > 6) this.attacks.shift();
+    if (this.dragonToken && this.phase === 'playing') this.dragonStep(); // the dragon lunges a room after every attack
+  }
+
+  // ---------------- Dragon Presence ----------------
+  // The dragon token prowls the Depths. It cannot see thieves: it hears Clank! made in the Depths,
+  // remembers where (leads fade each round) and heads for the loudest lead. It ignores locks, one-way
+  // tunnels and monsters, and never leaves the Depths.
+  nextTurnIdx() {
+    this.turnIdx = (this.turnIdx + 1) % this.players.length;
+    if (this.turnIdx === 0 && this.dragonToken && this.phase === 'playing') this.dragonRound();
+  }
+
+  // Clank! made in the Depths within earshot leaves a lead on that room, remembered with whoever made it.
+  dragonHears(p, n) {
+    const d = this.dragonToken;
+    if (!d || !this.board.room(p.room)?.depths) return; // the surface is out of earshot
+    const far = this.dragonDistances(d.room)[p.room];
+    if (far == null || far > this.dragonSense.range) return; // too far away to hear
+    const lead = d.leads[p.room] || { strength: 0 };
+    d.leads[p.room] = { strength: lead.strength + n, pid: p.id };
+    this.dragonAim();
+  }
+
+  dragonDistances(from) {
+    const dist = { [from]: 0 }, todo = [from];
+    while (todo.length) {
+      const u = todo.shift();
+      for (const v of this.board.connectedRooms(u)) if (dist[v] == null && this.board.room(v)?.depths) { dist[v] = dist[u] + 1; todo.push(v); }
+    }
+    return dist;
+  }
+
+  // What the dragon wants right now: the loudest lead, or the thief whose scent it has.
+  // Noise louder than the scent's pull wins, so a noisy rival can draw it off a quiet one.
+  dragonWant() {
+    const d = this.dragonToken, sense = this.dragonSense;
+    const dist = this.dragonDistances(d.room);
+    let best = null;
+    for (const [rid, lead] of Object.entries(d.leads)) {
+      if (dist[rid] == null || rid === d.room) continue;
+      const score = lead.strength - dist[rid] * 0.05; // nearer wins ties
+      if (!best || score > best.score) best = { room: rid, score, pid: lead.pid, why: 'noise' };
+    }
+    const q = d.scent && this.playerById(d.scent.pid);
+    if (d.scent && (!q || q.status !== 'in' || !this.board.room(q.room)?.depths)) {
+      if (q) this.log(`The dragon loses ${q.name}'s scent`);
+      d.scent = null;
+    } else if (q && dist[q.room] != null && (!best || sense.scentPull >= best.score)) best = { room: q.room, score: sense.scentPull, pid: q.id, why: 'scent' };
+    return best;
+  }
+
+  // Re-decide the target and the next room (the next room is fixed in advance, so it can be foreseen).
+  dragonAim() {
+    const d = this.dragonToken;
+    const want = this.dragonWant();
+    const was = d.target, wasBy = d.targetBy;
+    d.target = want && want.room !== d.room ? want.room : null;
+    d.targetBy = d.target ? want.pid : null;
+    d.why = want?.why || null;
+    const near = this.board.connectedRooms(d.room).filter((id) => this.board.room(id)?.depths);
+    let next = null;
+    if (want?.room === d.room) next = d.room; // stays on its prey
+    else if (d.target) {
+      const back = this.dragonDistances(d.target);
+      next = near.filter((id) => back[id] != null).sort((a, b) => back[a] - back[b])[0] || null;
+    }
+    if (!next && near.length) { // wander, but keep the same random choice until something changes
+      if (!near.includes(d.next) || d.next === d.room) { const fresh = near.filter((id) => id !== d.prev); const pool = fresh.length ? fresh : near; d.next = pool[Math.floor(Math.random() * pool.length)]; }
+      next = d.next;
+    }
+    d.next = next;
+    // tell the thief it is now coming for, when that changes because of their noise
+    if (d.target && d.why === 'noise' && (d.target !== was || d.targetBy !== wasBy)) {
+      const p = this.playerById(d.targetBy);
+      if (p && p.room === d.target) this.alert(p, 'The dragon heard you!', `Your Clank! carried through the Depths. The dragon is heading for ${this.board.room(d.target).name}: get out of there or keep quiet.`, 'heard');
+    }
+  }
+
+  dragonRound() {
+    const sense = this.dragonSense, d = this.dragonToken;
+    const steps = this.countdown ? sense.wakeMoves : sense.moves; // once someone is out, the dragon wakes further
+    for (let i = 0; i < steps && this.phase === 'playing'; i++) if (this.dragonStep({ sniff: true }) === 'stayed') break; // sniffs a found thief once a round
+    for (const k of Object.keys(d.leads)) { d.leads[k].strength *= sense.fade; if (d.leads[k].strength < 0.3) delete d.leads[k]; }
+    // scent fades every round, even while it lurks with you; it only renews when it finds you again
+    for (const k of Object.keys(d.ignore)) if (--d.ignore[k] <= 0) delete d.ignore[k];
+    if (d.scent && --d.scent.rounds <= 0) { // it gives up on this thief for a couple of rounds, so it cannot just re-find them
+      this.log(`The dragon loses ${this.playerById(d.scent.pid)?.name}'s scent and loses interest for now`);
+      d.ignore[d.scent.pid] = 2;
+      d.scent = null;
+    }
+    if (this.phase === 'playing') this.dragonAim();
+  }
+
+  dragonStep({ sniff = false } = {}) {
+    const d = this.dragonToken;
+    delete d.leads[d.room]; // it has searched here
+    const prey = this.activePlayers().filter((p) => p.room === d.room);
+    const r0 = this.board.room(d.room);
+    // someone walked into its room and it has no scent yet: it finds them (as if it had just arrived)
+    const fresh = prey.filter((p) => !d.ignore[p.id]);
+    if (fresh.length && !d.scent) { this.dragonFinds(fresh, r0); this.dragonAim(); return 'stayed'; }
+    // it stays with a thief whose scent it still has, unless louder noise calls it away
+    const want = this.dragonWant();
+    const stay = prey.length && d.scent && prey.some((p) => p.id === d.scent.pid) && (!want || want.room === d.room);
+    if (stay) {
+      d.target = null;
+      if (sniff) for (const p of prey) {
+        this.log(`The dragon lurks with ${p.name} in ${r0.name}`);
+        this.alert(p, 'The dragon is still on you!', `It is lurking in ${r0.name} with you and sniffs you out again: you make 1 Clank!. Its attacks hit you for double damage until you get away. It loses your scent in ${plural(d.scent.rounds, 'round')} unless it finds you again.`);
+        this.addClank(p, 1);
+      }
+      this.dragonAim();
+      return 'stayed';
+    }
+    this.dragonAim();
+    const next = d.next;
+    if (!next || next === d.room) return;
+    const why = d.why === 'scent' ? 'follows a scent' : d.why === 'noise' ? 'follows the noise' : 'prowls';
+    d.prev = d.room;
+    d.room = next;
+    d.next = null;
+    const r = this.board.room(next);
+    this.log(`The dragon ${why} to ${r.name}`);
+    this.dragonFinds(this.activePlayers().filter((p) => p.room === next && !d.ignore[p.id]), r);
+    this.dragonAim();
+  }
+
+  dragonFinds(prey, r) {
+    const d = this.dragonToken;
+    for (const p of prey) {
+      this.log(`The dragon sniffs out ${p.name}!`);
+      d.scent = { pid: p.id, rounds: this.dragonSense.scent };
+      this.alert(p, 'The dragon is hunting you!', `It found you in ${r.name} and sniffed you out: you make 1 Clank!. While you share its room, its attacks hit you for double damage. It now has your scent and will follow you for ${plural(this.dragonSense.scent, 'round')}, even if you stay quiet, unless someone else makes more noise. Reach the surface to shake it off.`);
+      this.addClank(p, 1);
+    }
+  }
+
+  // Dragon Presence card effects
+  clearScent(p) {
+    const d = this.dragonToken;
+    if (!d) return;
+    let cleared = false;
+    if (d.scent?.pid === p.id) { d.scent = null; cleared = true; }
+    for (const [rid, lead] of Object.entries(d.leads)) if (lead.pid === p.id) { delete d.leads[rid]; cleared = true; }
+    this.log(cleared ? `${p.name} covers their tracks: the dragon loses the trail` : `${p.name} covers their tracks`);
+    this.dragonAim();
+  }
+
+  alert(p, title, text, kind = 'popup') {
+    this.alerts.push({ seq: ++this.alertSeq, pid: p.id, title, text, kind });
+    if (this.alerts.length > 12) this.alerts.shift();
   }
 
   knockOut(p) {
@@ -391,8 +570,8 @@ export class Game {
     let guard = 0;
     while (guard++ < this.players.length + 1) {
       const p = this.currentPlayer();
-      if (p.onCountdown) { this.countdownStep(p); if (this.phase !== 'playing') return; this.turnIdx = (this.turnIdx + 1) % this.players.length; continue; }
-      if (p.status !== 'in') { this.turnIdx = (this.turnIdx + 1) % this.players.length; continue; }
+      if (p.onCountdown) { this.countdownStep(p); if (this.phase !== 'playing') return; this.nextTurnIdx(); continue; }
+      if (p.status !== 'in') { this.nextTurnIdx(); continue; }
       this.turnNumber++;
       this.turn = { skill: 0, swords: 0, boots: 0, clankMade: 0, negativeClank: 0, teleports: 0, flags: {}, enteredCrystalCave: false, conditionals: [], gemDiscount: 0, goldBonus: 0, skillPerClank: 0, deferred: [] };
       this.log(`— ${p.name}'s turn —`);
@@ -428,7 +607,7 @@ export class Game {
     this.turn = null;
     this.drawCards(p, 5, true);
     this.refillRow();
-    this.turnIdx = (this.turnIdx + 1) % this.players.length;
+    this.nextTurnIdx();
     this.beginTurn();
   }
 
@@ -755,6 +934,10 @@ export class Game {
       results: this.results || null,
       lastAttack: this.lastAttack || null,
       attacks: this.attacks, attackSeq: this.attackSeq,
+      alerts: this.alerts.filter((a) => a.pid === pid), alertSeq: this.alertSeq,
+      dragonToken: this.dragonToken ? { room: this.dragonToken.room, target: this.dragonToken.target, scent: this.dragonToken.scent, awareness: this.dragonSense.label,
+        // foreseen next room: only for the thief who played a card that reveals it, during their turn
+        next: me && me === this.currentPlayer() && this.turn?.flags.foreseeDragon ? this.dragonToken.next : undefined } : null,
       customCards: Object.fromEntries(this.customCards.map((id) => [id, publicDef(CARD_DEFS[id])])),
     };
   }

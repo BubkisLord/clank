@@ -5,12 +5,13 @@
   const TYPES = [
     ['Gain', [['skill', '+ Skill'], ['swords', '+ Swords'], ['boots', '+ Boots'], ['gold', '+ Gold'], ['heal', 'Heal'], ['draw', 'Draw cards'], ['clank', 'Clank! (negative removes)']]],
     ['Move', [['teleport', 'Teleport'], ['flag:ignoreMonsterTunnels', 'Ignore monsters in tunnels'], ['flag:ignoreCrystalCaves', 'No stopping in Crystal Caves'], ['flag:waterBreathing', 'Breathe underwater this turn']]],
+    ['Dragon Presence', [['flag:foreseeDragon', "See the dragon's next move this turn"], ['clearScent', 'Cover your tracks (dragon loses your scent)']]],
     ['Others & dragon', [['othersClank', 'Each other player adds Clank!'], ['allClank', 'Every player adds Clank!'], ['dragonAttack', 'Dragon attack'], ['returnDragonCubes', 'Return set-aside dragon cubes (up to)'], ['rage', 'Move the Dragon marker (negative moves down)']]],
     ['Cards', [['trash', 'Trash a card'], ['discardThen', 'Discard a card, then…'], ['replaceRow', 'Replace a Dungeon Row card'], ['gemDiscount', 'Gems cost less this turn'], ['goldBonus', 'Extra gold each time you gain gold'], ['buyTomes', 'Pay gold for Secret Tomes'], ['takeAdjacentSecret', 'Take a secret from an adjacent room'], ['freeAcquire', 'Acquire a row card for free'], ['returnToHand', 'Return this card to your hand']]],
     ['Logic', [['choose', 'Choose…'], ['when', 'If…, then'], ['skillPerClank', '+1 Skill per Clank! this turn']]],
   ];
   const TYPE_LABEL = Object.fromEntries(TYPES.flatMap(([, l]) => l));
-  const ORDER = ['skill', 'swords', 'boots', 'gold', 'heal', 'clank', 'draw', 'teleport', 'dragonAttack', 'othersClank', 'allClank', 'flag', 'gemDiscount', 'goldBonus', 'returnDragonCubes', 'rage', 'skillPerClank', 'buyTomes', 'freeAcquire', 'when', 'choose', 'discardThen', 'trash', 'replaceRow', 'takeAdjacentSecret', 'returnToHand'];
+  const ORDER = ['skill', 'swords', 'boots', 'gold', 'heal', 'clank', 'draw', 'teleport', 'dragonAttack', 'othersClank', 'allClank', 'flag', 'gemDiscount', 'goldBonus', 'returnDragonCubes', 'rage', 'skillPerClank', 'buyTomes', 'freeAcquire', 'when', 'choose', 'discardThen', 'trash', 'replaceRow', 'takeAdjacentSecret', 'returnToHand', 'clearScent'];
   const CONDS = [['monkeyIdol', 'you have a Monkey Idol'], ['artifact', 'you have an Artifact'], ['crown', 'you have a Crown'], ['chalice', 'you have the Chalice'], ['otherCompanion', 'another Companion is in play'], ['inPlayOrDiscard', 'a card is in your play area or discard pile'], ['inFlooded', 'you are in a flooded room']];
   const condKey = (w) => (w.otherCompanion ? 'otherCompanion' : w.inFlooded ? 'inFlooded' : w.inPlayOrDiscard ? 'inPlayOrDiscard' : w.has);
   const ZONES = [['hand', 'hand'], ['playArea', 'play area'], ['discard', 'discard pile']];
@@ -73,6 +74,8 @@
       case 'goldBonus': return `Each time you gain Gold this turn, gain ${n} more`;
       case 'flag:ignoreMonsterTunnels': return 'Ignore monsters in tunnels this turn';
       case 'flag:ignoreCrystalCaves': return 'You do not have to stop in Crystal Caves this turn';
+      case 'flag:foreseeDragon': return "You can see where the dragon will move next this turn";
+      case 'clearScent': return 'The dragon loses your scent and forgets the noise you made';
       case 'flag:waterBreathing': return 'You take no damage for being out of air this turn';
       case 'buyTomes': return `Pay ${e.buyTomes.gold} Gold to gain ${e.buyTomes.count === 1 ? 'a Secret Tome' : `${e.buyTomes.count} Secret Tomes`}`;
       case 'trash': return `${e.trash.optional ? 'You may trash' : 'Trash'} ${e.trash.match ? `a ${cardName(e.trash.match)}` : 'a card'}`;

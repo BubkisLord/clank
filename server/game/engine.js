@@ -66,9 +66,7 @@ export class Game {
 
   setOption(key, value) {
     if (this.phase !== 'lobby') fail('Options can only be changed before the game starts');
-    if (key === 'map' && ['random', 'classic'].includes(value)) this.options.map = value;
-    else if (key === 'autoEnd') this.options.autoEnd = !!value;
-    else if (key === 'dragonPresence') this.options.dragonPresence = !!value;
+    if (key === 'dragonPresence') this.options.dragonPresence = !!value;
     else if (key === 'dragonAwareness' && AWARENESS[value]) this.options.dragonAwareness = value;
     else if (key === 'botLevel' && LEVELS[value]) this.options.botLevel = value;
     else if (key === 'botPace' && PACES[value]) {

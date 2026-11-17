@@ -324,9 +324,6 @@ function render() {
     $('options').innerHTML = `<span class="opt-l">Deck</span><div class="deck-pick">${host
         ? `<select id="deckSel" title="Which cards stock the dungeon deck">${(deckList || [{ id: o.deck, name: o.deckName }]).map((d) => `<option value="${esc(d.id)}" ${d.id === o.deck ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select>`
         : `<b>${esc(o.deckName || 'Base game')}</b>`}</div>`
-      + `<span class="opt-l">Game</span>`
-      + seg('map', o.map, [['random', 'Random dungeon', 'A new dungeon layout every game'], ['classic', 'Classic map', 'The standard board']])
-      + seg('autoEnd', o.autoEnd ? '1' : '0', [['1', 'Auto-end', 'End your turn automatically once your hand is empty'], ['0', 'Manual', 'Press End turn yourself']])
       + `<span class="opt-l">Dragon</span>`
       + seg('dragonPresence', o.dragonPresence ? '1' : '0', [['0', 'Classic', 'The dragon only attacks from its lair, as in the board game'], ['1', 'Dragon Presence', 'A dragon token prowls the Depths, hunting by sound: Clank! you make down there draws it to you. Its attacks deal double damage to anyone in its room.']], 'wide')
       + (o.dragonPresence ? `<span class="opt-l">Awareness</span>` + seg('dragonAwareness', o.dragonAwareness || 'stirring', [
@@ -337,7 +334,7 @@ function render() {
         + seg('botLevel', o.botLevel || 'medium', [['easy', 'Easy', 'Sloppy: misjudges cards, wounds and prompts'], ['medium', 'Medium', 'Solid, straightforward play'], ['hard', 'Hard', 'Plans detours and races rivals to artifacts']])
         + seg('botPace', o.botPace || 'mixed', [['reckless', 'Reckless', 'Bots grab the nearest artifact and run: shorter games'], ['mixed', 'Mixed', 'A mix of fast and slow bots'], ['patient', 'Patient', 'Bots build their decks and delve deep: longer games']]) : '');
     if ($('deckSel')) { $('deckSel').onchange = (e) => send({ type: 'option', key: 'deck', value: e.target.value }); if (!deckList) loadDeckList(); }
-    $('options').querySelectorAll('[data-opt]').forEach((b) => { b.onclick = () => send({ type: 'option', key: b.dataset.opt, value: ['autoEnd', 'dragonPresence'].includes(b.dataset.opt) ? b.dataset.val === '1' : b.dataset.val }); });
+    $('options').querySelectorAll('[data-opt]').forEach((b) => { b.onclick = () => send({ type: 'option', key: b.dataset.opt, value: b.dataset.opt === 'dragonPresence' ? b.dataset.val === '1' : b.dataset.val }); });
     return;
   }
   $('waiting').classList.add('hidden'); $('game').classList.remove('hidden');

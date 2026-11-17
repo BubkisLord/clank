@@ -50,14 +50,17 @@ Anything exotic can use `{ fn: (game, player, card) => ... }`.
 
 ## Lobby options
 
-- **Map**: *Random dungeon* (default) generates a new map each game from rules in
+Every game uses a freshly generated dungeon and turns end automatically.
+
+- **Dungeon**: generated each game from rules in
   `server/game/board.js` (`generateBoard`): three surface rows and four Depths rows, guaranteed
   connectivity and escape routes, hazards rolled per tunnel, features dealt from surface and
   Depths pools. Master Keys open exactly two things: the **Vault** (the 30-point artifact, often
   with a locked antechamber holding the 25-point artifact or a Major Secret) and the **Shortcut**,
-  a locked passage joining a deep room directly to the surface. *Classic map* uses the fixed hand-made layout.
-- **Turns**: *Auto-end when idle* ends a turn automatically once all cards are played and no
-  action remains (nothing affordable, nowhere to go, nothing useful to use). *Manual* never does.
+  a locked passage joining a deep room directly to the surface. (The fixed hand-made `classicBoard`
+  is still used by tests.)
+- **Turns** end automatically once all cards are played and no action remains (nothing
+  affordable, nowhere to go, nothing useful to use).
 
 Players may end a turn early (unplayed cards are discarded) and may postpone a card's choice
 dialog ("Decide later") to play other cards first; postponed choices lapse at end of turn.

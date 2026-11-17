@@ -57,8 +57,7 @@ Every game uses a freshly generated dungeon and turns end automatically.
   connectivity and escape routes, hazards rolled per tunnel, features dealt from surface and
   Depths pools. Master Keys open exactly two things: the **Vault** (the 30-point artifact, often
   with a locked antechamber holding the 25-point artifact or a Major Secret) and the **Shortcut**,
-  a locked passage joining a deep room directly to the surface. (The fixed hand-made `classicBoard`
-  is still used by tests.)
+  a locked passage joining a deep room directly to the surface.
 - **Turns** end automatically once all cards are played and no action remains (nothing
   affordable, nowhere to go, nothing useful to use).
 
@@ -126,6 +125,6 @@ the flag on any card to match your copy of the game.
 
 `public/assets/` holds original artwork generated for this project (room tiles, card-kind
 illustrations, lobby background, dragon icon). The full-resolution sources are in
-`design/art-src/`. `design/build-mock.mjs` regenerates the Figma design mock with the art embedded.
+`design/art-src/`.
 No official Clank! card artwork is used: that art is copyrighted by Dire Wolf Digital / Renegade
 Game Studios and is not redistributable.

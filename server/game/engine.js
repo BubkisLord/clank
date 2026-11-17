@@ -1,7 +1,7 @@
 import { makeBotProfile, STYLES, LEVELS, PACES } from './ai.js';
 import { uid, shuffle } from './util.js';
 import { def, makeCard, publicDef, buildDungeonDeck, buildStartingDeck, buildReserve, allPublicDefs, CARD_DEFS } from './cards/index.js';
-import { RAGE_TRACK, RAGE_START, HEALTH_MAX, CLANK_SUPPLY, DRAGON_CUBES, MASTERY_POINTS, MARKET_PRICE, ARTIFACTS, classicBoard, generateBoard, floodBoard, publicRules } from './board.js';
+import { RAGE_TRACK, RAGE_START, HEALTH_MAX, CLANK_SUPPLY, DRAGON_CUBES, MASTERY_POINTS, MARKET_PRICE, ARTIFACTS, generateBoard, floodBoard, publicRules } from './board.js';
 import { MAJOR_SECRETS, MINOR_SECRETS, SECRET_DEFS, buildSecretStack, publicSecretDefs } from './secrets.js';
 import { applyEffect, evalCondition } from './effects.js';
 import { BASE_DECK, registerDeck, needsFlooding } from './cards/decks.js';
@@ -59,7 +59,7 @@ export class Game {
     this.dragonToken = null; // Dragon Presence: { room, prev, target, leads: { roomId: strength } }
     this.version = 0;
     this.createdAt = Date.now();
-    this.options = { map: 'random', autoEnd: true, botLevel: 'medium', botPace: 'mixed', deck: 'base', deckName: BASE_DECK.name, dragonPresence: false, dragonAwareness: 'stirring' };
+    this.options = { autoEnd: true, botLevel: 'medium', botPace: 'mixed', deck: 'base', deckName: BASE_DECK.name, dragonPresence: false, dragonAwareness: 'stirring' };
     this.deck = BASE_DECK;
     this.customCards = [];
   }
@@ -123,8 +123,8 @@ export class Game {
     const n = this.players.length;
     if (n < 1) fail('Need at least 1 player');
     this.phase = 'playing';
-    this.board = this.options.map === 'classic' ? classicBoard() : generateBoard();
-    this.log(this.options.map === 'classic' ? 'The classic dungeon awaits.' : 'A new dungeon has been carved out for this heist.');
+    this.board = generateBoard();
+    this.log('A new dungeon has been carved out for this heist.');
 
     const { list, custom } = registerDeck(this.deck);
     this.customCards = custom;

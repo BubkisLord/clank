@@ -309,7 +309,6 @@ function render() {
   $('lobby').classList.add('hidden');
   if (state.phase === 'lobby') {
     $('waiting').classList.remove('hidden'); $('game').classList.add('hidden');
-    scheduleInline();
     $('waitCode').textContent = state.code;
     $('shareLink').textContent = `${location.origin}/?g=${state.code}`;
     const host = state.players[0].id === me;
@@ -345,7 +344,6 @@ function render() {
     const vp = state.players.find((x) => x.id === $('viewer').dataset.pid);
     if (vp) { showCards(vp); box.scrollTop = y; }
   }
-  scheduleInline();
 }
 
 function renderPlayers() {
@@ -847,32 +845,11 @@ function renderResults() {
   $('resultsBody').innerHTML = `<table class="score"><tr><th>Player</th><th></th><th>Artifact</th><th>Secrets/Idols</th><th>Items</th><th>Gold</th><th>Cards</th><th>Mastery</th><th>Total</th></tr>${rows}</table>`;
 }
 
-// ---------- Figma capture support: inline image assets as data URIs so captures keep the art ----------
-const _dataCache = {};
-async function toDataUri(url) {
-  if (!_dataCache[url]) _dataCache[url] = fetch(url).then((r) => r.blob()).then((b) => new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(b); }));
-  return _dataCache[url];
-}
-let inlineTimer = null;
-async function inlineAssetsForCapture() {
-  for (const el of document.querySelectorAll('[style*="background-image"]')) {
-    const m = el.style.backgroundImage.match(/url\(["']?([^"')]+)/);
-    if (m && !m[1].startsWith('data:')) el.style.backgroundImage = `url(${await toDataUri(m[1])})`;
-  }
-  for (const im of document.querySelectorAll('svg image')) { const h = im.getAttribute('href'); if (h && !h.startsWith('data:')) im.setAttribute('href', await toDataUri(h)); }
-  for (const img of document.querySelectorAll('img')) { const src = img.getAttribute('src'); if (src && !src.startsWith('data:')) img.src = await toDataUri(src); }
-  for (const [id, url, extra] of [['lobby', 'assets/bg-lobby.jpg', 'radial-gradient(ellipse at 50% 30%, rgba(13,10,16,.2), rgba(13,10,16,.92)), '], ['waiting', 'assets/bg-lobby.jpg', 'radial-gradient(ellipse at 50% 30%, rgba(13,10,16,.2), rgba(13,10,16,.92)), ']]) {
-    const el = $(id); if (el && !el.classList.contains('hidden')) { el.style.backgroundImage = `${extra}url(${await toDataUri(url)})`; el.style.backgroundAttachment = 'scroll'; }
-  }
-}
-function scheduleInline() { if (!location.hash.includes('figmacapture')) return; clearTimeout(inlineTimer); inlineTimer = setTimeout(inlineAssetsForCapture, 400); }
-
 // ---------- boot ----------
 (async () => {
   STATIC = await (await fetch('/api/static')).json();
   refreshOpenGames();
   connect();
-  scheduleInline();
 })();
 
 // ---------- theme: dark by default, parchment (light) on request; remembered per browser ----------

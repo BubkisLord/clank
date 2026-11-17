@@ -7,7 +7,7 @@ import { generateBoard, Board } from '../server/game/board.js';
 function setup(n = 2, opts = {}) {
   const g = new Game('T');
   for (let i = 0; i < n; i++) g.addPlayer(`P${i}`);
-  Object.assign(g.options, { autoEnd: false, map: 'classic' }, opts);
+  Object.assign(g.options, { autoEnd: false }, opts);
   g.start();
   return g;
 }
@@ -72,7 +72,7 @@ test('escaping does not strand the turn: the player can still act and end the tu
   const g = setup(2);
   const p = cur(g);
   p.artifacts.push(5);
-  p.room = 'a1';
+  p.room = g.board.connectedRooms('start')[0];
   playAll(g);
   g.turn.boots = 1;
   g.act(p.id, { type: 'move', to: 'start' });
@@ -310,13 +310,13 @@ test('Grand Plan scores 7 with three Market items', () => {
 test('a deck with water cards floods part of the Depths; the base deck does not', async () => {
   const { BUILTIN_BY_ID } = await import('../server/game/cards/decks.js');
   assert.ok(!setup().board.rooms.some((r) => r.flooded));
-  for (const map of ['classic', 'random']) {
+  for (let i = 0; i < 3; i++) {
     const g = new Game('W'); g.addPlayer('A'); g.addPlayer('B');
-    Object.assign(g.options, { autoEnd: false, map });
+    Object.assign(g.options, { autoEnd: false });
     g.setDeck(BUILTIN_BY_ID['sunken-treasures']);
     g.start();
     const wet = g.board.rooms.filter((r) => r.flooded);
-    assert.ok(wet.length >= 5, `${map}: ${wet.length} flooded rooms`);
+    assert.ok(wet.length >= 5, `${wet.length} flooded rooms`);
     assert.ok(wet.every((r) => r.depths && !r.crystal && !r.market && !r.start));
   }
   assert.ok(!generateBoard().rooms.some((r) => r.flooded), 'flooding never touches the shared room list');
@@ -326,7 +326,7 @@ test('flooded rooms: swimming costs 2 boots, and staying under all turn costs 1 
   const g = setup();
   const p = cur(g);
   const ob = g.board;
-  g.board = new Board({ rooms: ob.rooms.map((r) => ({ ...r })), tunnels: ob.tunnels, name: ob.name, geometry: ob.geometry }); // never touch the shared classic rooms
+  g.board = new Board({ rooms: ob.rooms.map((r) => ({ ...r })), tunnels: ob.tunnels, name: ob.name, geometry: ob.geometry }); // flood a copy, not the game's own rooms
   const [a, b] = g.board.tunnels.find(([x, y]) => g.board.room(x).depths && g.board.room(y).depths && x !== 'start');
   g.board.room(a).flooded = true; g.board.room(b).flooded = true;
   p.room = a;
@@ -371,11 +371,11 @@ test('"choose two" asks twice and never offers the same option again (Wishing We
 // ---------- Dragon Presence ----------
 test('Dragon Presence is off by default; when on, the dragon starts at the nest and never leaves the Depths', () => {
   assert.equal(setup().dragonToken, null);
-  for (const map of ['classic', 'random']) {
-    const g = setup(2, { dragonPresence: true, map });
+  for (let i = 0; i < 3; i++) {
+    const g = setup(2, { dragonPresence: true });
     const d = g.dragonToken;
-    assert.equal(g.board.room(d.room).artifact, 30, `${map}: starts on the nest`);
-    for (let i = 0; i < 60; i++) { g.dragonStep(); assert.ok(g.board.room(d.room).depths, `${map}: stays in the Depths`); }
+    assert.equal(g.board.room(d.room).artifact, 30, 'starts on the nest');
+    for (let i = 0; i < 60; i++) { g.dragonStep(); assert.ok(g.board.room(d.room).depths, 'stays in the Depths'); }
   }
 });
 
@@ -501,7 +501,7 @@ test('bots do not end their turn in the dragon\'s room when they can walk out', 
   const g = new Game('BD');
   g.addPlayer('Bot', { bot: true }); g.addPlayer('Other', { bot: true });
   g.players.forEach((p) => { p.bot ||= { style: 'balanced' }; });
-  Object.assign(g.options, { autoEnd: false, map: 'classic', dragonPresence: true });
+  Object.assign(g.options, { autoEnd: false, dragonPresence: true });
   g.start();
   const p = cur(g);
   const d = g.dragonToken;

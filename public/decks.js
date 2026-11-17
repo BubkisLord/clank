@@ -122,8 +122,8 @@
     const want = localStorage.getItem('clank:deck');
     await selectDeck(decks.some((d) => d.id === want) ? want : 'base', { force: true });
   }
-  function close() {
-    if (dirty() && !confirm('You have unsaved changes. Leave without saving?')) return;
+  async function close() {
+    if (dirty() && !await askConfirm('You have unsaved changes. Leave without saving?', { ok: 'Leave', danger: true })) return;
     $('workshop').classList.add('hidden');
     $('lobby').classList.remove('hidden');
     closeSheet();
@@ -138,7 +138,7 @@
 
   async function selectDeck(id, { force = false } = {}) {
     if (!force && draft?.id === id) return;
-    if (!force && dirty() && !confirm('You have unsaved changes. Switch decks and lose them?')) { renderList(); return; }
+    if (!force && dirty() && !await askConfirm('You have unsaved changes. Switch decks and lose them?', { ok: 'Switch', danger: true })) { renderList(); return; }
     try {
       const d = await api('GET', `/${encodeURIComponent(id)}`);
       draft = { id: d.id, name: d.name, builtin: !!d.builtin, cards: d.cards.map((c) => ({ ...c, ...slotAtoms(c) })) };
@@ -169,14 +169,14 @@
       toast(msg);
     } catch (e) { toast(e.message); }
   }
-  function cloneDeck() {
+  async function cloneDeck() {
     if (!draft) return;
-    if (dirty() && !confirm('Clone the deck as it is now, including unsaved changes?')) return;
+    if (dirty() && !await askConfirm('Clone the deck as it is now, including unsaved changes?', { ok: 'Clone' })) return;
     create({ name: `${draft.name} (copy)`.slice(0, 40), cards: draft.cards }, 'Cloned: you are now editing the copy');
   }
   async function deleteDeck() {
     if (!draft || readOnly()) return;
-    if (!confirm(`Delete the deck "${draft.name}"? This cannot be undone.`)) return;
+    if (!await askConfirm(`Delete the deck "${draft.name}"? This cannot be undone.`, { ok: 'Delete deck', danger: true })) return;
     try { await api('DELETE', `/${encodeURIComponent(draft.id)}`); savedJSON = JSON.stringify(strip(draft)); toast('Deck deleted'); await loadList(); await selectDeck('base', { force: true }); }
     catch (e) { toast(e.message); }
   }
@@ -213,10 +213,10 @@
     draft.cards.splice(sel + 1, 0, c);
     selectCard(sel + 1);
   }
-  function removeCard() {
+  async function removeCard() {
     if (readOnly() || sel == null) return;
     const c = draft.cards[sel];
-    if (!confirm(`Remove "${c.name}" (${c.qty} ${c.qty === 1 ? 'copy' : 'copies'}) from this deck?`)) return;
+    if (!await askConfirm(`Remove "${c.name}" (${c.qty} ${c.qty === 1 ? 'copy' : 'copies'}) from this deck?`, { ok: 'Remove', danger: true })) return;
     draft.cards.splice(sel, 1);
     sel = null; closeSheet();
     renderAll();
@@ -224,10 +224,12 @@
   function selectCard(i) {
     sel = i;
     renderGrid(); renderEditor(); renderStats();
-    if (window.innerWidth <= 900) { $('wsEditor').classList.add('open'); document.body.classList.add('ws-sheet'); }
+    $('wsEditor').classList.add('open'); document.body.classList.add('ws-sheet');
     $('wsEditor').scrollTop = 0;
   }
   function closeSheet() { $('wsEditor').classList.remove('open'); document.body.classList.remove('ws-sheet'); }
+  // close the editor; its contents stay until the slide-out finishes
+  function closeEditor() { if (sel == null) return; closeSheet(); sel = null; renderGrid(); }
 
   // called after any edit to the selected card
   function changed({ editor = false } = {}) {
@@ -323,7 +325,8 @@
     const sub = (c.tags || [])[0] || 'companion';
     const slots = SLOTS[c.kind];
     box.innerHTML = `
-      <div class="ws-edhead"><h3>${readOnly() ? 'Card' : 'Edit card'}</h3><button class="defer" id="wsSheetClose">Done</button></div>
+      <div class="ws-edhead"><h3>${readOnly() ? 'Card' : 'Edit card'}</h3><button class="defer" id="wsSheetClose" title="Close the editor (Esc)">✕ Close</button></div>
+      <div class="ws-edbody"><div class="ws-edside">
       <div class="ws-preview"></div>
       <label class="ws-f"><span>Name</span><input data-f="name" maxlength="32" value="${esc(c.name)}" ${dis}></label>
       <div class="ws-f"><span>Type</span><div class="seg">${[['monster', 'Monster'], ['device', 'Device'], ['companion', 'Companion / item']].map(([k, l]) => `<button data-kind="${k}" class="${c.kind === k ? 'on' : ''}" ${dis}>${l}</button>`).join('')}</div></div>
@@ -334,15 +337,17 @@
         <label class="ws-f"><span>Points</span>${stepper('points', c.points, -5, 20, dis)}</label>
         <div class="ws-f"><span>Symbols</span><label class="ws-chk"><input type="checkbox" data-f="dragon" ${c.dragon ? 'checked' : ''} ${dis}> Dragon attack</label><label class="ws-chk"><input type="checkbox" data-f="danger" ${c.danger ? 'checked' : ''} ${dis}> Danger</label></div>
       </div>
+      </div><div class="ws-edmain">
       ${slots.map(([s, l]) => `<div class="ws-slot"><h4>${l}</h4>${effectList(c[s] || (c[s] = []), dis)}</div>`).join('')}
       <label class="ws-f"><span>Card text <button class="defer ws-auto" id="wsAutoText" ${dis} title="Write the text from the effects above">Write from effects</button></span><textarea data-f="text" rows="3" maxlength="240" ${dis}>${esc(c.text)}</textarea>
         <small class="muted">${autoText.has(c) ? 'Follows the effects as you edit them; type here to write your own.' : 'Shown to players. The effects above are what the game actually does.'}</small></label>
       ${c.baseId && STATIC?.cards?.[c.baseId] && /At game end/i.test(STATIC.cards[c.baseId].text) ? '<p class="muted">This card keeps its special end-of-game scoring from the base game.</p>' : ''}
-      ${readOnly() ? '' : `<div class="ws-cardbtns"><button id="wsDup">Duplicate</button><button id="wsRemove" class="danger">Remove from deck</button></div>`}`;
+      ${readOnly() ? '' : `<div class="ws-cardbtns"><button id="wsDup">Duplicate</button><button id="wsRemove" class="danger">Remove from deck</button></div>`}
+      </div></div>`;
     renderPreview();
     box.scrollTop = y;
     const on = (id, f) => { const el = $(id); if (el) el.onclick = f; };
-    on('wsSheetClose', () => { closeSheet(); sel = null; renderGrid(); renderEditor(); });
+    on('wsSheetClose', closeEditor);
     on('wsDup', duplicateCard); on('wsRemove', removeCard);
     on('wsAutoText', () => { c.text = writeText(c); autoText.add(c); changed({ editor: true }); });
   }
@@ -455,7 +460,7 @@
   $('wsBack').onclick = close;
   // a new deck starts as a copy of the base game's cards
   $('wsNew').onclick = async () => {
-    if (dirty() && !confirm('You have unsaved changes. Start a new deck and lose them?')) return;
+    if (dirty() && !await askConfirm('You have unsaved changes. Start a new deck and lose them?', { ok: 'New deck', danger: true })) return;
     try { const base = await api('GET', '/base'); create({ name: 'My deck', cards: base.cards }, 'New deck created from the base game\'s cards'); } catch (e) { toast(e.message); }
   };
   $('wsImport').onclick = () => $('wsFile').click();
@@ -500,8 +505,8 @@
   document.addEventListener('keydown', (e) => {
     if ($('workshop').classList.contains('hidden')) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
-    else if (e.key === 'Escape' && $('wsEditor').classList.contains('open')) { closeSheet(); }
+    else if (e.key === 'Escape' && sel != null && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) closeEditor();
   });
   window.addEventListener('beforeunload', (e) => { if (dirty()) { e.preventDefault(); e.returnValue = ''; } });
-  window.addEventListener('resize', () => { if (window.innerWidth > 900) closeSheet(); });
+  $('wsBackdrop').onclick = closeEditor;
 })();

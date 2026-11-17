@@ -82,6 +82,22 @@ function act(action) { send({ type: 'action', action }); }
 let holdUntil = 0, holdTimer = null;
 const holdFor = (ms) => { holdUntil = Math.max(holdUntil, Date.now() + ms); };
 
+// In-page yes/no dialog (the browser's confirm() is blocked in some embedded browsers). Resolves true or false.
+let confirmDone = null;
+function askConfirm(message, { ok = 'OK', cancel = 'Cancel', danger = false } = {}) {
+  if (confirmDone) confirmDone(false);
+  $('confirmText').textContent = message;
+  $('confirmYes').textContent = ok; $('confirmNo').textContent = cancel;
+  $('confirmYes').classList.toggle('danger', danger); $('confirmYes').classList.toggle('primary', !danger);
+  $('confirm').classList.remove('hidden');
+  $('confirmYes').focus();
+  return new Promise((resolve) => { confirmDone = (v) => { confirmDone = null; $('confirm').classList.add('hidden'); resolve(v); }; });
+}
+$('confirmYes').onclick = () => confirmDone?.(true);
+$('confirmNo').onclick = () => confirmDone?.(false);
+$('confirm').addEventListener('click', (e) => { if (e.target === $('confirm')) confirmDone?.(false); });
+document.addEventListener('keydown', (e) => { if (confirmDone && e.key === 'Escape') { e.stopImmediatePropagation(); confirmDone(false); } }, true);
+
 let toastTimer;
 function toast(t, kind = '') { const el = $('toast'); el.textContent = t; el.className = kind; clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.add('hidden'), 3000); }
 
@@ -232,7 +248,7 @@ function render() {
     $('waitPlayers').innerHTML = state.players.map((p, i) => `<li style="border-color:${COLOR[p.color]}"><span>${esc(p.name)}${i === 0 ? ' <em>host</em>' : ''}${p.id === me ? ' <em>you</em>' : ''}${p.bot ? ` <em>${esc(p.botStyle || 'computer')}</em>` : ''}</span>${host && i > 0 ? `<button class="kick" data-kick="${p.id}" title="Remove ${esc(p.name)} from the game">${p.bot ? 'Remove' : 'Kick'}</button>` : ''}</li>`).join('')
       + (host && state.players.length < 4 ? `<li class="addbot"><button id="addBot" title="Add a computer-controlled player">＋ Add a bot player</button></li>` : '');
     if ($('addBot')) $('addBot').onclick = () => send({ type: 'addBot' });
-    $('waitPlayers').querySelectorAll('[data-kick]').forEach((b) => { b.onclick = () => { if (state.players.find((x) => x.id === b.dataset.kick)?.bot) return send({ type: 'kick', playerId: b.dataset.kick }); if (confirm(`Remove ${b.title.replace('Remove ', '').replace(' from the game', '')} from the game?`)) send({ type: 'kick', playerId: b.dataset.kick }); }; });
+    $('waitPlayers').querySelectorAll('[data-kick]').forEach((b) => { b.onclick = () => { if (state.players.find((x) => x.id === b.dataset.kick)?.bot) return send({ type: 'kick', playerId: b.dataset.kick }); askConfirm(`Remove ${b.title.replace('Remove ', '').replace(' from the game', '')} from the game?`, { ok: 'Kick', danger: true }).then((yes) => { if (yes) send({ type: 'kick', playerId: b.dataset.kick }); }); }; });
     $('startBtn').disabled = !host;
     const o = state.options || {};
     const dis = host ? '' : 'disabled';
@@ -669,9 +685,9 @@ function renderMe() {
   if ($('viewToggle')) $('viewToggle').onclick = () => { viewOwn = !viewOwn; render(); };
   if ($('showResults')) $('showResults').onclick = () => { resultsDismissed = false; render(); };
   if ($('leaveEnded')) $('leaveEnded').onclick = leaveGame;
-  if ($('endTurn')) $('endTurn').onclick = () => {
+  if ($('endTurn')) $('endTurn').onclick = async () => {
     const unplayed = p.hand.length, postponed = (state.legal?.deferred || []).length;
-    if ((unplayed || postponed) && !confirm(`End your turn now?${unplayed ? ` ${unplayed} card${unplayed > 1 ? 's' : ''} in hand will be discarded unplayed.` : ''}${postponed ? ' Postponed choices will lapse.' : ''}`)) return;
+    if ((unplayed || postponed) && !await askConfirm(`End your turn now?${unplayed ? ` ${unplayed} card${unplayed > 1 ? 's' : ''} in hand will be discarded unplayed.` : ''}${postponed ? ' Postponed choices will lapse.' : ''}`, { ok: 'End turn' })) return;
     act({ type: 'endTurn' });
   };
   const who = watching ? `${esc(cur.name)}'s` : 'Your';

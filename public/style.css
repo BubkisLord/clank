@@ -585,7 +585,7 @@ html.dark select, html.dark textarea { background:#18141d; border-color:var(--st
 .ws-top h2 { font-size:28px; color:var(--text); flex:1; white-space:nowrap; }
 .ws-top .theme-btn { margin-left:auto; }
 .ws-narrow { display:none; }
-.ws-main { flex:1; min-height:0; display:grid; grid-template-columns:240px minmax(0,1fr) 400px; }
+.ws-main { flex:1; min-height:0; display:grid; grid-template-columns:240px minmax(0,1fr); }
 .ws-col { min-height:0; overflow-y:auto; padding:14px; }
 
 #wsDecks { background:var(--ink-2); border-right:2px solid #5a3f27; display:flex; flex-direction:column; gap:10px; }
@@ -621,10 +621,17 @@ html.dark select, html.dark textarea { background:#18141d; border-color:var(--st
 .ws-add { aspect-ratio:150/208; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; border-style:dashed; background:rgba(255,255,255,.03); box-shadow:none; color:var(--muted); }
 .ws-add span { font-size:34px; line-height:1; color:var(--gold); }
 
-#wsEditor { background:var(--ink-2); border-left:2px solid #5a3f27; display:flex; flex-direction:column; gap:12px; }
+/* card editor: a sheet that slides up over the grid, centred and wide on big screens */
+#wsEditor { position:fixed; left:50%; bottom:0; width:min(1400px, 94vw); height:94dvh; z-index:40; background:var(--ink-2); display:flex; flex-direction:column; gap:12px;
+  border:2px solid var(--gold-2); border-bottom:none; border-radius:14px 14px 0 0; box-shadow:0 -20px 60px rgba(0,0,0,.6); padding:14px 22px calc(14px + env(safe-area-inset-bottom));
+  transform:translate(-50%, 102%); visibility:hidden; transition:transform .24s ease-out, visibility 0s linear .24s; container-type:inline-size; }
+#wsEditor.open { transform:translate(-50%, 0); visibility:visible; transition:transform .24s ease-out; }
+#wsBackdrop { position:fixed; inset:0; z-index:39; background:rgba(5,3,8,.55); opacity:0; pointer-events:none; transition:opacity .24s; }
+body.ws-sheet #wsBackdrop { opacity:1; pointer-events:auto; }
+body.ws-sheet #wsDeck { overflow:hidden; }
 .ws-empty { margin:auto; text-align:center; color:var(--muted); font-size:16px; }
-.ws-edhead { display:flex; justify-content:space-between; align-items:center; }
-.ws-edhead .defer { display:none; color:var(--text); }
+.ws-edhead { display:flex; justify-content:space-between; align-items:center; position:sticky; top:-14px; margin:-14px -22px 0; padding:12px 22px; background:inherit; z-index:2; border-bottom:1px solid #3a2a1e; }
+.ws-edhead .defer { color:var(--text); }
 .ws-preview { display:flex; justify-content:center; }
 .ws-preview .card { --w:170px; font-size:13px; }
 .ws-f { display:flex; flex-direction:column; gap:5px; font-family:var(--caps); font-size:10.5px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); }
@@ -675,7 +682,7 @@ html:not(.dark) #wsDecks h3, html:not(.dark) .ws-edhead h3, html:not(.dark) .ws-
 html:not(.dark) .ws-edhead .defer { color:var(--parch-ink); }
 
 /* tablets: narrower editor */
-@media (max-width: 1200px) { .ws-main { grid-template-columns:200px minmax(0,1fr) 340px; } }
+@media (max-width: 1200px) { .ws-main { grid-template-columns:200px minmax(0,1fr); } }
 /* phones and small tablets: one column, deck list becomes a dropdown, the editor slides up as a sheet */
 @media (max-width: 900px) {
   .ws-top { gap:8px; padding:8px 10px; }
@@ -689,15 +696,29 @@ html:not(.dark) .ws-edhead .defer { color:var(--parch-ink); }
   .ws-filters .seg { scrollbar-width:none; }
   .ws-tile .card { font-size:10.5px; }
   .ws-tile .card .banner { font-size:12px; }
-  #wsEditor { position:fixed; left:0; right:0; bottom:0; height:88dvh; z-index:40; border-left:none; border-top:2px solid var(--gold-2); border-radius:14px 14px 0 0;
-    box-shadow:0 -20px 60px rgba(0,0,0,.6); transform:translateY(102%); transition:transform .22s ease-out; padding-bottom:calc(14px + env(safe-area-inset-bottom)); }
-  #wsEditor.open { transform:none; }
-  .ws-edhead { position:sticky; top:-14px; margin:-14px -14px 0; padding:12px 14px; background:inherit; z-index:2; border-bottom:1px solid #3a2a1e; }
-  .ws-edhead .defer { display:inline-block; }
-  body.ws-sheet #wsDeck { overflow:hidden; }
+  #wsEditor { width:100vw; height:92dvh; padding-left:14px; padding-right:14px; border-left:none; border-right:none; }
+  .ws-edhead { margin:-14px -14px 0; padding:12px 14px; }
   .ws-actions { width:100%; } .ws-actions button { flex:1; }
   #wsSearch { flex:1 1 100%; }
 }
 @media (max-width: 420px) { .ws-grid2 { grid-template-columns:1fr; } .ws-top h2 { display:none; } }
 @media (prefers-reduced-motion: reduce) { #wsEditor { transition:none; } .ws-tile { transition:none; } }
 .ws-tile .card .cost { white-space:nowrap; }
+
+/* in-page confirm dialog */
+.confirm-box { width:min(420px, 100%); gap:18px; }
+.confirm-box p { margin:0; font-size:17px; }
+.confirm-btns { display:flex; justify-content:flex-end; gap:10px; }
+.confirm-btns button { padding:9px 16px; font-size:13px; }
+
+/* card editor: two columns (preview and stats | effects) when the sheet is wide enough */
+.ws-edbody, .ws-edside, .ws-edmain { display:flex; flex-direction:column; gap:12px; }
+@container (min-width: 760px) {
+  .ws-edbody { display:grid; grid-template-columns:minmax(230px, 270px) minmax(0,1fr); gap:24px; align-items:start; }
+  .ws-edside { position:sticky; top:52px; }
+  .ws-edside .ws-grid2 { grid-template-columns:1fr; }
+  .ws-edmain { min-width:0; }
+  .ws-edmain .ws-slot:first-child { border-top:none; padding-top:0; }
+  .ws-preview .card { --w:230px; font-size:14px; }
+  .ws-preview .card .banner { font-size:16px; }
+}

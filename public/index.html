@@ -32,6 +32,7 @@
       <div id="rejoin" class="hidden row"></div>
       <div id="openGames"></div>
       <p id="lobbyError" class="error"></p>
+      <button id="workshopBtn" class="workshop-btn" title="Clone and edit decks, or create new cards">🛠 Deck Workshop <span class="muted">— clone decks, edit and invent cards</span></button>
     </div>
   </section>
 
@@ -49,6 +50,46 @@
       <div id="options"></div>
       <button id="startBtn" class="primary big">Begin</button>
       <p class="muted">2–4 players recommended.</p>
+    </div>
+  </section>
+
+  <!-- Deck workshop -->
+  <section id="workshop" class="screen hidden">
+    <header class="ws-top">
+      <button id="wsBack" title="Back to the main menu">← Tavern</button>
+      <h2>Deck Workshop</h2>
+      <select id="wsDeckSel" class="ws-narrow" aria-label="Deck"></select>
+      <button class="theme-btn" data-theme-toggle title="Switch between dark and light (parchment) theme">☀</button>
+    </header>
+    <div class="ws-main">
+      <aside id="wsDecks" class="ws-col">
+        <h3>Decks</h3>
+        <div id="wsDeckList"></div>
+        <div class="ws-deckbtns">
+          <button id="wsNew" title="Start a new deck from a copy of the base game">＋ New deck</button>
+          <button id="wsImport" title="Load a deck from a .json file">Import…</button>
+          <input id="wsFile" type="file" accept=".json,application/json" hidden>
+        </div>
+      </aside>
+      <main id="wsDeck" class="ws-col">
+        <div class="ws-deckbar">
+          <input id="wsName" maxlength="40" aria-label="Deck name" placeholder="Deck name">
+          <div class="ws-actions">
+            <button id="wsClone" title="Make an editable copy of this deck">Clone</button>
+            <button id="wsExport" title="Download this deck as a .json file">Export</button>
+            <button id="wsDelete" title="Delete this deck">Delete</button>
+            <button id="wsSave" class="primary" title="Save changes (Ctrl+S)">Save</button>
+          </div>
+        </div>
+        <div id="wsStats" class="ws-stats"></div>
+        <div id="wsNotice" class="ws-notice hidden"></div>
+        <div class="ws-filters">
+          <div id="wsKinds" class="seg"></div>
+          <input id="wsSearch" type="search" placeholder="Search cards…" aria-label="Search cards">
+        </div>
+        <div id="wsGrid" class="cards"></div>
+      </main>
+      <aside id="wsEditor" class="ws-col"></aside>
     </div>
   </section>
 
@@ -103,6 +144,7 @@
   </section>
 </div>
 <script src="app.js"></script>
+<script src="decks.js"></script>
 <script>
 // Figma "capture to design" helper: only loaded when the page is opened with a #figmacapture=… hash.
 if (location.hash.includes('figmacapture')) { const s = document.createElement('script'); s.src = 'https://mcp.figma.com/mcp/html-to-design/capture.js'; s.async = true; document.head.appendChild(s); }

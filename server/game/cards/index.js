@@ -27,9 +27,10 @@ export function def(card) {
   return CARD_DEFS[typeof card === 'string' ? card : card.id];
 }
 
-export function buildDungeonDeck() {
+// `list` is [{ id, qty }] from a custom deck (see decks.js); the base game's cards by default.
+export function buildDungeonDeck(list = DUNGEON_SETS.flat()) {
   const deck = [];
-  for (const set of DUNGEON_SETS) for (const d of set) for (let i = 0; i < d.qty; i++) deck.push(makeCard(d.id));
+  for (const d of list) for (let i = 0; i < d.qty; i++) deck.push(makeCard(d.id));
   return shuffle(deck);
 }
 

@@ -172,7 +172,7 @@ function roomLoot(game, p, rid) {
     let v = 0;
     if (rs.majorSecret) v += 3;
     if (rs.minorSecrets?.length) v += 1.5;
-    if (r.monkeyShrine && rs.monkeyIdols > 0) v += 5;
+    if (r.monkeyShrine && rs.monkeyIdols > 0) v += 4;
     if (r.market && p.gold >= MARKET_PRICE && game.market.crowns.length) v += 3;
     if (r.fountain && p.damage > 0) v += 1;
     return v;

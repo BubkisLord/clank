@@ -52,6 +52,7 @@ function connect() {
     } else if (msg.type === 'state') {
       state = msg.state;
       me = state.me;
+      if (state.customCards) Object.assign(STATIC.cards, state.customCards); // cards from a custom deck
       const wait = holdUntil - Date.now();
       clearTimeout(holdTimer);
       if (wait > 0) holdTimer = setTimeout(render, wait); else render();
@@ -134,6 +135,12 @@ $('resultsClose').onclick = () => closeModal('results');
 $('name').value = localStorage.getItem('clank:name') || '';
 $('name').onchange = () => localStorage.setItem('clank:name', $('name').value);
 
+// decks the host can pick in the waiting room
+let deckList = null;
+async function loadDeckList() {
+  try { deckList = await (await fetch('/api/decks')).json(); if (state?.phase === 'lobby') render(); } catch { /* keep the current one */ }
+}
+
 async function refreshOpenGames() {
   try {
     const list = await (await fetch('/api/games')).json();
@@ -175,8 +182,8 @@ function cardHTML(def, { cost, count, buttons = '', playable = false, small = fa
     + (def.danger ? '<span class="badge danger-ic" title="Danger: each dragon attack draws 1 extra cube while this is in the row">☠</span>' : '');
   const art = artFor(def);
   const subtype = def.kind === 'monster' ? 'Monster' : def.kind === 'device' ? 'Device' : def.tags.includes('gem') ? 'Gem' : def.tags.includes('companion') ? 'Companion' : def.tags.includes('equipment') ? 'Item' : '';
-  return `<div class="card ${kind} ${art} ${playable ? 'playable' : ''} ${cls}" title="${def.text}" ${attrs}>
-    <div class="banner"><span>${def.name}</span><span>${count != null ? `<span class="count">×${count}</span>` : ''}</span></div>
+  return `<div class="card ${kind} ${art} ${playable ? 'playable' : ''} ${cls}" title="${esc(def.text)}" ${attrs}>
+    <div class="banner"><span>${esc(def.name)}</span><span>${count != null ? `<span class="count">×${count}</span>` : ''}</span></div>
     ${subtype ? `<div class="subtype">${subtype}</div>` : ''}
     <div class="body">${richText(def.text)}</div>
     ${buttons ? `<div class="act">${buttons}</div>` : ''}
@@ -230,12 +237,16 @@ function render() {
     const o = state.options || {};
     const dis = host ? '' : 'disabled';
     const seg = (key, cur, items) => `<div class="seg">${items.map(([v, l, tip]) => `<button data-opt="${key}" data-val="${v}" class="${cur === v ? 'on' : ''}" title="${tip}" ${dis}>${l}</button>`).join('')}</div>`;
-    $('options').innerHTML = `<span class="opt-l">Game</span>`
+    $('options').innerHTML = `<span class="opt-l">Deck</span><div class="deck-pick">${host
+        ? `<select id="deckSel" title="Which cards stock the dungeon deck">${(deckList || [{ id: o.deck, name: o.deckName }]).map((d) => `<option value="${esc(d.id)}" ${d.id === o.deck ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select>`
+        : `<b>${esc(o.deckName || 'Base game')}</b>`}</div>`
+      + `<span class="opt-l">Game</span>`
       + seg('map', o.map, [['random', 'Random dungeon', 'A new dungeon layout every game'], ['classic', 'Classic map', 'The standard board']])
       + seg('autoEnd', o.autoEnd ? '1' : '0', [['1', 'Auto-end', 'End your turn automatically once your hand is empty'], ['0', 'Manual', 'Press End turn yourself']])
       + (state.players.some((p) => p.bot) ? `<span class="opt-l">Bots</span>`
         + seg('botLevel', o.botLevel || 'medium', [['easy', 'Easy', 'Sloppy: misjudges cards, wounds and prompts'], ['medium', 'Medium', 'Solid, straightforward play'], ['hard', 'Hard', 'Plans detours and races rivals to artifacts']])
         + seg('botPace', o.botPace || 'mixed', [['reckless', 'Reckless', 'Bots grab the nearest artifact and run: shorter games'], ['mixed', 'Mixed', 'A mix of fast and slow bots'], ['patient', 'Patient', 'Bots build their decks and delve deep: longer games']]) : '');
+    if ($('deckSel')) { $('deckSel').onchange = (e) => send({ type: 'option', key: 'deck', value: e.target.value }); if (!deckList) loadDeckList(); }
     $('options').querySelectorAll('[data-opt]').forEach((b) => { b.onclick = () => send({ type: 'option', key: b.dataset.opt, value: b.dataset.opt === 'autoEnd' ? b.dataset.val === '1' : b.dataset.val }); });
     return;
   }
@@ -717,7 +728,7 @@ function renderPrompt() {
   if (!pr || pr.pid !== me || !pr.options) { $('prompt').classList.add('hidden'); return; }
   $('prompt').classList.remove('hidden');
   $('promptTitle').innerHTML = `<span>${pr.title}</span>${isMyTurn() ? '<button id="deferBtn" class="defer" title="Close this and come back to it later this turn">✕ Decide later</button>' : ''}`;
-  $('promptOptions').innerHTML = pr.options.map((o, i) => o.card ? `<div data-opt="${i}">${cardHTML(o.card, { playable: true })}</div>` : `<button class="opt" data-opt="${i}">${o.label}</button>`).join('');
+  $('promptOptions').innerHTML = pr.options.map((o, i) => o.card ? `<div data-opt="${i}">${cardHTML(o.card, { playable: true })}</div>` : `<button class="opt" data-opt="${i}">${esc(o.label)}</button>`).join('');
   $('promptOptions').querySelectorAll('[data-opt]').forEach((el) => { el.onclick = () => act({ type: 'resolve', value: pr.options[Number(el.dataset.opt)].value }); });
   if ($('deferBtn')) $('deferBtn').onclick = () => act({ type: 'defer' });
 }

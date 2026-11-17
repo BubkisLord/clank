@@ -51,3 +51,12 @@ Effects are plain objects processed by `../effects.js`. Available keys:
 
 Conditions for `when`: `{ has: 'crown' | 'artifact' | 'monkeyIdol' | 'chalice' }`,
 `{ otherCompanion: true }`.
+
+## Custom decks (Deck Workshop)
+
+The Deck Workshop (main menu) clones and edits dungeon decks in the browser. Decks are saved as
+JSON in `data/decks/` (or `$CLANK_DATA/decks`) and the host picks one in the waiting room.
+`decks.js` validates them: only the effect keys above are allowed (no `fn`), within fixed ranges.
+At game start, a card identical to a base card keeps the base id; anything else is registered
+under a content-hashed id (`x_…`), and its definition is sent to clients with the game state.
+The starting deck and the Reserve are not editable yet.

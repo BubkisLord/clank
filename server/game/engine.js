@@ -4,6 +4,7 @@ import { def, makeCard, publicDef, buildDungeonDeck, buildStartingDeck, buildRes
 import { RAGE_TRACK, RAGE_START, HEALTH_MAX, CLANK_SUPPLY, DRAGON_CUBES, MASTERY_POINTS, MARKET_PRICE, ARTIFACTS, classicBoard, generateBoard, publicRules } from './board.js';
 import { MAJOR_SECRETS, MINOR_SECRETS, SECRET_DEFS, buildSecretStack, publicSecretDefs } from './secrets.js';
 import { applyEffect, evalCondition } from './effects.js';
+import { BASE_DECK, registerDeck } from './cards/decks.js';
 
 const COLORS = ['red', 'blue', 'green', 'yellow'];
 const MAX_PLAYERS = 4;
@@ -27,7 +28,9 @@ export class Game {
     this.attackSeq = 0;
     this.version = 0;
     this.createdAt = Date.now();
-    this.options = { map: 'random', autoEnd: true, botLevel: 'medium', botPace: 'mixed' };
+    this.options = { map: 'random', autoEnd: true, botLevel: 'medium', botPace: 'mixed', deck: 'base', deckName: BASE_DECK.name };
+    this.deck = BASE_DECK;
+    this.customCards = [];
   }
 
   setOption(key, value) {
@@ -42,6 +45,14 @@ export class Game {
       for (const p of this.players.filter((x) => x.bot)) { p.bot = makeBotProfile(dealt, value); dealt.push(p.bot.style); }
     }
     else fail('Unknown option');
+  }
+
+  // A validated deck (see cards/decks.js) to build the dungeon deck from.
+  setDeck(deck) {
+    if (this.phase !== 'lobby') fail('Options can only be changed before the game starts');
+    this.deck = deck || BASE_DECK;
+    this.options.deck = this.deck.id;
+    this.options.deckName = this.deck.name;
   }
 
   // ---------------- lobby ----------------
@@ -84,7 +95,10 @@ export class Game {
     this.board = this.options.map === 'classic' ? classicBoard() : generateBoard();
     this.log(this.options.map === 'classic' ? 'The classic dungeon awaits.' : 'A new dungeon has been carved out for this heist.');
 
-    this.dungeonDeck = buildDungeonDeck();
+    const { list, custom } = registerDeck(this.deck);
+    this.customCards = custom;
+    this.dungeonDeck = buildDungeonDeck(list);
+    if (this.deck !== BASE_DECK) this.log(`The dungeon is stocked from the "${this.deck.name}" deck.`);
     this.dungeonRow = [null, null, null, null, null, null];
     this.dungeonDiscard = [];
     this.reserve = buildReserve();
@@ -677,6 +691,7 @@ export class Game {
       results: this.results || null,
       lastAttack: this.lastAttack || null,
       attacks: this.attacks, attackSeq: this.attackSeq,
+      customCards: Object.fromEntries(this.customCards.map((id) => [id, publicDef(CARD_DEFS[id])])),
     };
   }
 }

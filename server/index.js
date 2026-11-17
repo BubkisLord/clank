@@ -7,8 +7,10 @@ import { WebSocketServer } from 'ws';
 import { Game, GameError } from './game/engine.js';
 import { randomCode } from './game/util.js';
 import { nextAction, BOT_NAMES } from './game/ai.js';
+import { listDecks, getDeck, saveDeck, deleteDeck } from './decks-store.js';
+import { DeckError } from './game/cards/decks.js';
 
-const BOT_DELAY = Number(process.env.BOT_DELAY || 850); // ms between bot actions, so people can follow along
+const BOT_DELAY = Number(process.env.BOT_DELAY || 1700); // ms between bot actions, so people can follow along
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -19,8 +21,36 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 const STATIC_DATA = JSON.stringify(Game.staticData());
 const games = new Map(); // code -> { game, sockets: Map<playerId, Set<ws>> }
 
+const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
+function readBody(req, limit = 256 * 1024) {
+  return new Promise((resolve, reject) => {
+    let size = 0; const chunks = [];
+    req.on('data', (c) => { size += c.length; if (size > limit) { reject(new DeckError('Deck is too large')); req.destroy(); } else chunks.push(c); });
+    req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || 'null')); } catch { reject(new DeckError('Body is not valid JSON')); } });
+    req.on('error', reject);
+  });
+}
+
+// Deck workshop API: GET /api/decks, GET/PUT/DELETE /api/decks/:id, POST /api/decks (create)
+async function decksApi(req, res, url) {
+  const id = decodeURIComponent(url.pathname.slice('/api/decks/'.length) || '') || null;
+  try {
+    if (req.method === 'GET' && !id) return json(res, 200, listDecks());
+    if (req.method === 'GET') { const d = getDeck(id); return d ? json(res, 200, d) : json(res, 404, { error: 'No such deck' }); }
+    if (req.method === 'POST' && !id) return json(res, 201, saveDeck(await readBody(req)));
+    if (req.method === 'PUT' && id) return json(res, 200, saveDeck(await readBody(req), id));
+    if (req.method === 'DELETE' && id) { deleteDeck(id); return json(res, 200, { ok: true }); }
+    return json(res, 405, { error: 'Method not allowed' });
+  } catch (e) {
+    if (e instanceof DeckError) return json(res, 400, { error: e.message });
+    console.error(e);
+    return json(res, 500, { error: 'Server error' });
+  }
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
+  if (url.pathname === '/api/decks' || url.pathname.startsWith('/api/decks/')) return decksApi(req, res, url);
   if (url.pathname === '/api/static') {
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'public, max-age=300' });
     return res.end(STATIC_DATA);
@@ -133,7 +163,12 @@ wss.on('connection', (ws) => {
           const entry = games.get(ws.gameCode);
           if (!entry) throw new GameError('Not in a game');
           if (entry.game.players[0]?.id !== ws.playerId) throw new GameError('Only the host can start');
-          entry.game.start();
+          const { game } = entry;
+          // use the deck as saved now, in case it was edited after it was picked
+          const deck = getDeck(game.options.deck);
+          if (!deck) game.log(`The "${game.options.deckName}" deck is gone; using the base game's cards.`);
+          game.setDeck(deck);
+          game.start();
           broadcast(entry);
           break;
         }
@@ -141,7 +176,11 @@ wss.on('connection', (ws) => {
           const entry = games.get(ws.gameCode);
           if (!entry) throw new GameError('Not in a game');
           if (entry.game.players[0]?.id !== ws.playerId) throw new GameError('Only the host can change options');
-          entry.game.setOption(msg.key, msg.value);
+          if (msg.key === 'deck') {
+            const deck = getDeck(String(msg.value || ''));
+            if (!deck) throw new GameError('No such deck');
+            entry.game.setDeck(deck);
+          } else entry.game.setOption(msg.key, msg.value);
           broadcast(entry);
           break;
         }

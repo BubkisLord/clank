@@ -147,6 +147,7 @@ function routeCosts(game, p, from, { reverse = false } = {}) {
         for (const [a, b, o = {}] of game.board.tunnels) { if (b === id) out.push({ to: a, ...o }); else if (a === id && !o.oneWay) out.push({ to: b, ...o }); }
         return out;
     };
+    const risk = dragonRisk(game, p);
     while (todo.size) {
         let u = null;
         for (const id of todo) if (dist[id] !== undefined && (u === null || dist[id] < dist[u])) u = id;
@@ -157,7 +158,7 @@ function routeCosts(game, p, from, { reverse = false } = {}) {
             const room = game.board.room(reverse ? u : t.to);
             const swim = room.flooded && game.board.room(reverse ? t.to : u)?.flooded;
             const c = (swim ? Math.max(2, t.boots || 1) : (t.boots || 1)) + (t.monsters || 0) * 1.3 + (room.crystal ? 1.2 : 0) + (room.flooded ? 0.4 : 0)
-                + (game.dragonToken ? (room.id === game.dragonToken.room ? 4 : game.board.connectedRooms(room.id).includes(game.dragonToken.room) ? 0.8 : 0) : 0); // keep clear of the hunting dragon
+                + dragonCost(game, p, room.id, risk); // keep clear of the hunting dragon
             if (dist[u] + c < (dist[t.to] ?? Infinity)) { dist[t.to] = dist[u] + c; prev[t.to] = u; }
         }
     }
@@ -181,6 +182,29 @@ function roomLoot(game, p, rid) {
     if (r.market && p.gold >= MARKET_PRICE && game.market.crowns.length) v += 3;
     if (r.fountain && p.damage > 0) v += 1;
     return v;
+}
+
+// Dragon Presence: how badly would sharing a room with the dragon hurt this thief?
+// Its attacks hit double there, so the danger is the expected number of this thief's cubes drawn per
+// attack (their share of the bag and Clank! area, times cubes drawn), worse when already wounded.
+// Being found also adds Clank! and lets it follow you, so even a quiet thief keeps some distance.
+function dragonRisk(game, p) {
+    if (!game.dragonToken) return 0;
+    const mine = (game.bag[p.id] || 0) + (game.clankArea[p.id] || 0);
+    const total = Object.values(game.bag).reduce((s, v) => s + v, 0) + Object.values(game.clankArea).reduce((s, v) => s + v, 0);
+    const draws = game.rageValue() + game.dangerCount();
+    const wounds = 1 + 2 * (p.damage / HEALTH_MAX);
+    const careless = levelOf(game, p).careless ? 0.4 : 1; // easy bots shrug it off
+    return (total ? draws * mine / total : 0) * wounds * careless;
+}
+// Extra route cost for entering a room, given that risk.
+function dragonCost(game, p, rid, risk) {
+    const d = game.dragonToken;
+    if (!d) return 0;
+    if (rid === d.room) return 1.5 + 6 * risk;
+    if (rid === d.target) return 0.5 + 2 * risk; // it is heading there
+    if (game.board.connectedRooms(rid).includes(d.room)) return 0.3 + 1.5 * risk;
+    return 0;
 }
 
 // Where should this thief be heading?
@@ -361,7 +385,10 @@ export function nextAction(game, p) {
     // 4. walk one step toward the target (swords go to tunnel monsters first)
     if (target && p.status === 'in' && target.room !== p.room) {
         const step = chooseStep(game, p, L, target);
-        if (step) return { type: 'move', to: step };
+        // grab-and-run only: do not walk into the dragon's room unless there are boots (or a teleport) left to get out again
+        const d = game.dragonToken, mv = L.moves.find((m) => m.to === step);
+        const trapped = d && step === d.room && mv && game.turn.boots - mv.cost < 1 && game.turn.teleports < 1 && dragonRisk(game, p) > 0.25;
+        if (step && !trapped) return { type: 'move', to: step };
         if (L.teleports.length) {
             const distT = routeCosts(game, p, target.room, { reverse: true }).dist;
             const d = (rid) => distT[rid] ?? Infinity;
@@ -383,6 +410,19 @@ export function nextAction(game, p) {
 
     // 7. leftover swords: the goblin pays a gold
     if (L.canFightGoblin) return { type: 'fight', slot: 'goblin' };
+
+    // 8. never end the turn in the dragon's room if there is a way out, nor (when loud) where it is heading
+    const risk8 = dragonRisk(game, p);
+    if (p.status === 'in' && (game.dragonToken?.room === p.room || (game.dragonToken?.target === p.room && risk8 > 0.4))) {
+        const risk = risk8;
+        const toT = target ? routeCosts(game, p, target.room, { reverse: true }).dist : {};
+        const out = L.moves.filter((m) => m.ok && p.damage + m.damage < HEALTH_MAX - 2)
+            .map((m) => ({ to: m.to, c: dragonCost(game, p, m.to, risk) + (toT[m.to] ?? 5) * 0.3 + m.damage * 2 }))
+            .sort((a, b) => a.c - b.c)[0];
+        if (out) return { type: 'move', to: out.to };
+        const tp = L.teleports.filter((id) => id !== 'start' || p.artifacts.length).sort((a, b) => dragonCost(game, p, a, risk) - dragonCost(game, p, b, risk))[0];
+        if (tp) return { type: 'teleport', to: tp };
+    }
 
     return { type: 'endTurn' };
 }

@@ -495,3 +495,22 @@ test('card effects for Dragon Presence: cover your tracks, and foresee its next 
   g.dragonStep();
   assert.equal(d.room, seen, 'the foreseen move is the move it makes');
 });
+
+test('bots do not end their turn in the dragon\'s room when they can walk out', async () => {
+  const { nextAction } = await import('../server/game/ai.js');
+  const g = new Game('BD');
+  g.addPlayer('Bot', { bot: true }); g.addPlayer('Other', { bot: true });
+  g.players.forEach((p) => { p.bot ||= { style: 'balanced' }; });
+  Object.assign(g.options, { autoEnd: false, map: 'classic', dragonPresence: true });
+  g.start();
+  const p = cur(g);
+  const d = g.dragonToken;
+  d.room = roomAt(g, 2); // somewhere with open tunnels (the nest itself is behind locked doors)
+  p.room = d.room;
+  g.rooms[p.room].artifact = null; g.rooms[p.room].majorSecret = null; g.rooms[p.room].minorSecrets = [];
+  p.hand = []; g.turn.boots = 3; g.turn.swords = 0; g.turn.skill = 0;
+  g.bag[p.id] = 10; // loud: lots of cubes in the bag
+  const a = nextAction(g, p);
+  assert.ok(['move', 'teleport'].includes(a.type), `expected to flee, got ${a.type}`);
+  assert.notEqual(a.to, d.room);
+});
